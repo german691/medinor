@@ -1,6 +1,6 @@
 import express from "express";
-import clientRoutes from "../../model/client/client.routes.js";
-import statusRoutes from "../../model/status/status.routes.js";
+import clientRoutes from "../../domains/client/client.routes.js";
+import statusRoutes from "../../domains/status/status.routes.js";
 
 // import adminRoutes from "../../domains/private/admin/admin.routes.js";
 // import accountRoutes from "../../domains/public/accounts/account.routes.js";

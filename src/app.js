@@ -2,7 +2,9 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import routes from "./interface/routes/index.js";
-import conn from "./model/db.js";
+import conn from "./domains/db.js";
+import { endpointNotFound } from "./domains/status/status.controller.js";
+import { errorMiddleware } from "./interface/middleware/error.middleware.js";
 
 const app = express();
 conn.then(() => {
@@ -15,12 +17,9 @@ app.use(express.urlencoded({ limit: "1mb", extended: true }));
 
 app.use("/api", routes);
 
-// --- AQUÍ ESTÁ LA LÍNEA CLAVE ---
-
-// app.use(endpointNotFound);
+app.use(endpointNotFound);
 // app.use("/api", activityLogger, routes);
-// app.use(joiErrorHandler);
-// app.use(errorMiddleware);
+app.use(errorMiddleware);
 
 // user rate limiters
 

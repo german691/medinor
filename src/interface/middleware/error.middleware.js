@@ -1,33 +1,21 @@
 export const errorMiddleware = (error, req, res, next) => {
-  const statusCode = error.statusCode || 500;
-  const message = error.message || "Internal Server Error";
-  res.status(statusCode).json({
-    status: "error",
-    statusCode,
-    message,
-  });
-};
+  const statusCode = error.status || 500;
 
-export const joiErrorHandler = (error, req, res, next) => {
   if (error.isJoi) {
+    console.log(error);
+
     return res.status(400).json({
-      message: "Error de validación",
-      details: error.details.map((detail) => detail.message),
+      status: 400,
+      message: "Error en la validación de los datos de entrada.",
+      details: error.details.map((detail) => detail.message.replace(/"/g, "'")),
     });
   }
-  next(error);
-};
+  console.log(error);
 
-export const multerErrorHandler = (err, req, res, next) => {
-  if (err instanceof multer.MulterError) {
-    if (err.code === "LIMIT_FILE_SIZE") {
-      return res.status(400).json({ error: "File size cannot exceed 2MB" });
-    }
-  }
-  if (err.message === "Only PDF files are allowed") {
-    return res.status(400).json({ error: err.message });
-  }
-  next(err);
+  return res.status(statusCode).json({
+    status: statusCode,
+    message: error.message || "Internal server error",
+  });
 };
 
 export const endpointNotFound = (req, res) => {
@@ -40,3 +28,15 @@ export const endpointNotFound = (req, res) => {
     method: req.method,
   });
 };
+
+// export const multerErrorHandler = (err, req, res, next) => {
+//   if (err instanceof multer.MulterError) {
+//     if (err.code === "LIMIT_FILE_SIZE") {
+//       return res.status(400).json({ error: "File size cannot exceed 2MB" });
+//     }
+//   }
+//   if (err.message === "Only PDF files are allowed") {
+//     return res.status(400).json({ error: err.message });
+//   }
+//   next(err);
+// };
