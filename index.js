@@ -9,7 +9,7 @@ const url = `${PROTOCOL}://${SERVER_IP}:${SERVER_PORT}`;
 
 const startApp = () => {
   app.listen(SERVER_PORT, () => {
-    console.log(`Medinor API at: ${url}/api/v1/`);
+    console.log(`Medinor API at: ${url}/api/`);
   });
 };
 
