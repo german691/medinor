@@ -9,6 +9,12 @@ import {
 import { clientObjectSchema } from "./client.validation.js";
 import { handleError } from "../../util/errorHandler.js";
 
+/**
+ * @desc    Consulta a la base de datos
+ *          devuelve los usuarios ya existentes o conflictivos.
+ * @route   POST /api/clients/analyze
+ * @access  Private
+ */
 export const analyzeClients = asyncHandler(async (req, res) => {
   const { clients: rawClients } = req.body;
   if (!rawClients || rawClients.length === 0) {
@@ -102,6 +108,11 @@ export const analyzeClients = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * @desc    Carga los usuarios a MongoDB.
+ * @route   POST /api/clients/make-migration
+ * @access  Private
+ */
 export const confirmClientMigration = asyncHandler(async (req, res) => {
   const { newClients } = req.body.data;
 
@@ -150,4 +161,152 @@ export const confirmClientMigration = asyncHandler(async (req, res) => {
       duplicateClients,
     },
   });
+});
+
+/**
+ * Función auxiliar para transformar el _id de MongoDB a un 'id' para el frontend.
+ * @param {object} doc - Documento de Mongoose.
+ * @returns {object} - Objeto plano con 'id' en lugar de '_id'.
+ */
+const transformClientDocument = (doc) => {
+  const plainObject = doc.toObject ? doc.toObject() : doc;
+  const { _id, ...rest } = plainObject;
+  return { id: _id.toString(), ...rest };
+};
+
+// --- ENDPOINTS DEL CRUD ---
+
+/**
+ * @desc    Obtener todos los clientes con paginación, filtros y ordenamiento.
+ * @route   GET /api/clients
+ * @access  Private
+ */
+export const getAllClients = asyncHandler(async (req, res) => {
+  const { page = 0, pageSize = 10, filters, sort } = req.query;
+
+  const findQuery = {};
+  if (filters) {
+    const parsedFilters = JSON.parse(filters);
+    if (parsedFilters.length > 0) {
+      findQuery.$and = parsedFilters.map((filter) => {
+        const { field, operator, value } = filter;
+        switch (operator) {
+          case "contains":
+            return { [field]: { $regex: value, $options: "i" } };
+          case "equals":
+            return { [field]: value };
+          case "startsWith":
+            return { [field]: { $regex: `^${value}`, $options: "i" } };
+          case "is":
+            return { [field]: value };
+          default:
+            return {};
+        }
+      });
+    }
+  }
+
+  const sortOptions = {};
+  if (sort) {
+    const parsedSort = JSON.parse(sort);
+    if (parsedSort.length > 0) {
+      const { field, sort: direction } = parsedSort[0];
+      sortOptions[field] = direction === "asc" ? 1 : -1;
+    }
+  } else {
+    sortOptions.razon_soci = 1; // Orden por defecto
+  }
+
+  const [clients, itemCount] = await Promise.all([
+    Client.find(findQuery)
+      .sort(sortOptions)
+      .limit(Number(pageSize))
+      .skip(Number(page) * Number(pageSize))
+      .lean(),
+    Client.countDocuments(findQuery),
+  ]);
+
+  // Se transforma cada documento para que use 'id' en lugar de '_id'.
+  const items = clients.map((client) => ({
+    ...client,
+    id: client._id.toString(),
+  }));
+
+  res.status(200).json({ items, itemCount });
+});
+
+/**
+ * @desc    Obtener un único cliente por su ID.
+ * @route   GET /api/clients/:id
+ * @access  Private
+ */
+export const getClientById = asyncHandler(async (req, res) => {
+  const client = await Client.findById(req.params.id);
+  if (!client) {
+    handleError("Cliente no encontrado.", 404);
+  }
+  res.status(200).json(transformClientDocument(client));
+});
+
+/**
+ * @desc    Crear un nuevo cliente.
+ * @route   POST /api/clients
+ * @access  Private
+ */
+export const createNewClient = asyncHandler(async (req, res) => {
+  const { cod_client, razon_soci, identiftri, active } = req.body;
+
+  const duplicate = await Client.findOne({
+    $or: [{ cod_client }, { identiftri }],
+  }).lean();
+  if (duplicate) {
+    handleError("Ya existe un cliente con el mismo Código o CUIT.", 409);
+  }
+
+  const hashedPassword = bcrypt.hashSync(String(identiftri), 10);
+  const newClient = new Client({
+    cod_client,
+    razon_soci,
+    identiftri,
+    active: active ? 1 : 0,
+    username: String(identiftri),
+    password: hashedPassword,
+  });
+
+  const savedClient = await newClient.save();
+
+  res.status(201).json(transformClientDocument(savedClient));
+});
+
+/**
+ * @desc    Actualizar un cliente existente.
+ * @route   PUT /api/clients/:id
+ * @access  Private
+ */
+export const updateClientById = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const updatedClient = await Client.findByIdAndUpdate(id, req.body, {
+    new: true,
+  });
+
+  if (!updatedClient) {
+    handleError("Cliente no encontrado para actualizar.", 404);
+  }
+
+  res.status(200).json(transformClientDocument(updatedClient));
+});
+
+/**
+ * @desc    Eliminar un cliente.
+ * @route   DELETE /api/clients/:id
+ * @access  Private
+ */
+export const deleteClientById = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const deletedClient = await Client.findByIdAndDelete(id);
+
+  if (!deletedClient) {
+    handleError("Cliente no encontrado para eliminar.", 404);
+  }
+  res.status(204).send();
 });
