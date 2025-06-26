@@ -65,13 +65,19 @@ export const analyzeClients = asyncHandler(async (req, res) => {
 
   const newClients = [];
   const currentClients = [];
+  const conflictingClients = [];
 
   for (const client of validClients) {
-    if (
-      existingCuits.has(client.IDENTIFTRI) ||
-      existingCodes.has(client.COD_CLIENT)
-    ) {
+    const codeExists = existingCodes.has(client.COD_CLIENT);
+    const cuitExists = existingCuits.has(client.IDENTIFTRI);
+
+    if (codeExists) {
       currentClients.push(client);
+    } else if (cuitExists) {
+      conflictingClients.push({
+        ...client,
+        conflictReason: `El CUIT ${client.IDENTIFTRI} ya está en uso por otro cliente.`,
+      });
     } else {
       newClients.push(client);
     }
@@ -85,10 +91,12 @@ export const analyzeClients = asyncHandler(async (req, res) => {
       totalInvalid: invalidRows.length,
       totalNew: newClients.length,
       totalCurrent: currentClients.length,
+      totalConflicts: conflictingClients.length,
     },
     data: {
       newClients,
       currentClients,
+      conflictingClients,
       invalidRows,
     },
   });
@@ -112,19 +120,34 @@ export const confirmClientMigration = asyncHandler(async (req, res) => {
     };
   });
 
+  let createdCount = 0;
+  let duplicateClients = [];
+
   try {
-    await Client.insertMany(clientsToCreate);
+    await Client.insertMany(clientsToCreate, { ordered: false });
+    createdCount = newClients.length;
   } catch (error) {
-    if (error.code === 11000) {
-      handleError(
-        "Conflicto: Uno o más de los clientes que intentas crear ya existen.",
-        409
-      );
+    if (error.code === 11000 && error.writeErrors) {
+      createdCount = error.result.nInserted;
+
+      const failedOperations = error.writeErrors.map((err) => err.op);
+      duplicateClients = failedOperations.map((op) => ({
+        COD_CLIENT: op.cod_client,
+        IDENTIFTRI: op.identiftri,
+        RAZON_SOCI: op.razon_soci,
+      }));
+    } else {
+      throw error;
     }
-    throw error;
   }
 
+  const message = `Migración completada. Clientes nuevos creados: ${createdCount}. Clientes duplicados encontrados: ${duplicateClients.length}.`;
+
   res.status(201).json({
-    message: `Migración completada. Se crearon ${clientsToCreate.length} nuevos clientes.`,
+    message,
+    data: {
+      createdCount,
+      duplicateClients,
+    },
   });
 });
