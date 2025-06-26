@@ -182,57 +182,13 @@ const transformClientDocument = (doc) => {
  * @access  Private
  */
 export const getAllClients = asyncHandler(async (req, res) => {
-  const { page = 0, pageSize = 10, filters, sort } = req.query;
-
-  const findQuery = {};
-  if (filters) {
-    const parsedFilters = JSON.parse(filters);
-    if (parsedFilters.length > 0) {
-      findQuery.$and = parsedFilters.map((filter) => {
-        const { field, operator, value } = filter;
-        switch (operator) {
-          case "contains":
-            return { [field]: { $regex: value, $options: "i" } };
-          case "equals":
-            return { [field]: value };
-          case "startsWith":
-            return { [field]: { $regex: `^${value}`, $options: "i" } };
-          case "is":
-            return { [field]: value };
-          default:
-            return {};
-        }
-      });
-    }
-  }
-
-  const sortOptions = {};
-  if (sort) {
-    const parsedSort = JSON.parse(sort);
-    if (parsedSort.length > 0) {
-      const { field, sort: direction } = parsedSort[0];
-      sortOptions[field] = direction === "asc" ? 1 : -1;
-    }
-  } else {
-    sortOptions.razon_soci = 1; // Orden por defecto
-  }
-
-  const [clients, itemCount] = await Promise.all([
-    Client.find(findQuery)
-      .sort(sortOptions)
-      .limit(Number(pageSize))
-      .skip(Number(page) * Number(pageSize))
-      .lean(),
-    Client.countDocuments(findQuery),
-  ]);
-
-  // Se transforma cada documento para que use 'id' en lugar de '_id'.
+  const clients = await Client.find();
   const items = clients.map((client) => ({
-    ...client,
-    id: client._id.toString(),
+    ...client._doc,
+    id: client._doc._id.toString(),
   }));
 
-  res.status(200).json({ items, itemCount });
+  res.status(200).json({ items });
 });
 
 /**
