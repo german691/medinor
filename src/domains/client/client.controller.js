@@ -210,7 +210,15 @@ export const getClientById = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const createNewClient = asyncHandler(async (req, res) => {
-  const { cod_client, razon_soci, identiftri, active } = req.body;
+  const { cod_client, razon_soci, identiftri, username, password, active } =
+    req.body;
+
+  if (!identiftri || !cod_client || razon_soci) {
+    handleError(
+      "Los campos Idetif. Tributario, Cód. Cliente y Razón social son obligatorios",
+      400
+    );
+  }
 
   const duplicate = await Client.findOne({
     $or: [{ cod_client }, { identiftri }],
@@ -219,13 +227,13 @@ export const createNewClient = asyncHandler(async (req, res) => {
     handleError("Ya existe un cliente con el mismo Código o CUIT.", 409);
   }
 
-  const hashedPassword = bcrypt.hashSync(String(identiftri), 10);
+  const hashedPassword = bcrypt.hashSync(password || String(identiftri), 10);
   const newClient = new Client({
     cod_client,
     razon_soci,
     identiftri,
-    active: active ? 1 : 0,
-    username: String(identiftri),
+    active: active ? true : false,
+    username: username || String(identiftri),
     password: hashedPassword,
   });
 
