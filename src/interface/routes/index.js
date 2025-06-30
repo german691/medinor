@@ -1,6 +1,7 @@
 import express from "express";
 import clientRoutes from "../../domains/private/client/client.routes.js";
 import productRoutes from "../../domains/private/product/product.routes.js";
+import labRoutes from "../../domains/private/lab/lab.routes.js";
 import statusRoutes from "../../domains/public/status/status.routes.js";
 
 // import adminRoutes from "../../domains/private/admin/admin.routes.js";
@@ -17,6 +18,7 @@ const router = express.Router();
 router.use("/", statusRoutes);
 router.use("/clients", clientRoutes);
 router.use("/products", productRoutes);
+router.use("/labs", labRoutes);
 
 // // router.use("/admin", auth([ROLES.admin, ROLES.superadmin]), adminRoutes);
 // router.use("/admin", adminRoutes);

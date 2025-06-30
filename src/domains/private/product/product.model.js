@@ -18,14 +18,4 @@ const productSchema = new mongoose.Schema(
   }
 );
 
-const labSchema = new mongoose.Schema(
-  {
-    name: { type: String, required: true, unique: true },
-  },
-  {
-    timestamps: true,
-  }
-);
-
-export const Lab = mongoose.model("Lab", labSchema);
 export const Product = mongoose.model("Product", productSchema);
