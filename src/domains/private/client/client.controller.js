@@ -5,7 +5,7 @@ import {
   cleanCodClient,
   cleanIdentiftri,
   cleanRazonSoci,
-} from "../../util/clientMigrationCleaner.js";
+} from "../../../util/clientMigrationCleaner.js";
 import { clientObjectSchema } from "./client.validation.js";
 
 const handleError = (message, statusCode) => {
@@ -195,6 +195,7 @@ export const confirmClientMigration = asyncHandler(async (req, res) => {
   });
 });
 
+/* convierte _id a id solo para consistencia */
 const transformClientDocument = (doc) => {
   const plainObject = doc.toObject ? doc.toObject() : doc;
   const { _id, __v, ...rest } = plainObject;
@@ -316,24 +317,4 @@ export const updateClientById = asyncHandler(async (req, res) => {
   }
 
   res.status(200).json(transformClientDocument(updatedClient));
-});
-
-/**
- * @desc    Eliminar un cliente.
- * @route   DELETE /api/clients/:id
- * @access  Private
- */
-export const deleteClientById = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const client = await Client.findById(id);
-
-  if (!client) {
-    handleError("Cliente no encontrado para eliminar.", 404);
-  }
-
-  await client.deleteOne();
-
-  res
-    .status(200)
-    .json({ message: `Cliente '${client.razon_soci}' eliminado.` });
 });

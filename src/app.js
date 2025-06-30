@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import routes from "./interface/routes/index.js";
 import conn from "./domains/db.js";
-import { endpointNotFound } from "./domains/status/status.controller.js";
+import { endpointNotFound } from "./domains/public/status/status.controller.js";
 import { errorMiddleware } from "./interface/middleware/error.middleware.js";
 
 const app = express();

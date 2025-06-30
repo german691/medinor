@@ -1,5 +1,3 @@
-// Archivo: client.routes.js
-
 import express from "express";
 import {
   analyzeClients,
@@ -10,7 +8,7 @@ import {
   updateClientById,
 } from "./client.controller.js";
 
-import { validateReqBody } from "../../interface/middleware/joi.middleware.js";
+import { validateReqBody } from "../../../interface/middleware/joi.middleware.js";
 
 import { createClientSchema, updateClientSchema } from "./client.validation.js";
 

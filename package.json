@@ -17,6 +17,6 @@
     "redis": "^5.1.0"
   },
   "scripts": {
-    "dev": "node index.js"
+    "dev": "nodemon index.js"
   }
 }
