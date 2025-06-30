@@ -7,11 +7,15 @@ import {
   cleanRazonSoci,
 } from "../../util/clientMigrationCleaner.js";
 import { clientObjectSchema } from "./client.validation.js";
-import { handleError } from "../../util/errorHandler.js";
+
+const handleError = (message, statusCode) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  throw error;
+};
 
 /**
- * @desc    Consulta a la base de datos
- *          devuelve los usuarios ya existentes o conflictivos.
+ * @desc    Consulta a la base de datos, devuelve los usuarios ya existentes o conflictivos.
  * @route   POST /api/clients/analyze
  * @access  Private
  */
@@ -59,34 +63,61 @@ export const analyzeClients = asyncHandler(async (req, res) => {
     );
   }
 
-  const cuits = validClients.map((c) => c.IDENTIFTRI);
-  const codes = validClients.map((c) => c.COD_CLIENT);
+  const cuitsInFile = validClients.map((c) => c.IDENTIFTRI);
+  const codesInFile = validClients.map((c) => c.COD_CLIENT);
 
   const clientsInDB = await Client.find({
-    $or: [{ identiftri: { $in: cuits } }, { cod_client: { $in: codes } }],
+    $or: [
+      { identiftri: { $in: cuitsInFile } },
+      { cod_client: { $in: codesInFile } },
+    ],
   });
 
-  const existingCuits = new Set(clientsInDB.map((c) => c.identiftri));
-  const existingCodes = new Set(clientsInDB.map((c) => c.cod_client));
+  const existingCuitsInDB = new Set(clientsInDB.map((c) => c.identiftri));
+  const existingCodesInDB = new Set(clientsInDB.map((c) => c.cod_client));
 
   const newClients = [];
   const currentClients = [];
   const conflictingClients = [];
 
-  for (const client of validClients) {
-    const codeExists = existingCodes.has(client.COD_CLIENT);
-    const cuitExists = existingCuits.has(client.IDENTIFTRI);
+  const processedCodes = new Set();
+  const processedCuits = new Set();
 
-    if (codeExists) {
+  for (const client of validClients) {
+    const { COD_CLIENT, IDENTIFTRI } = client;
+
+    if (existingCodesInDB.has(COD_CLIENT)) {
       currentClients.push(client);
-    } else if (cuitExists) {
+      continue;
+    }
+
+    if (existingCuitsInDB.has(IDENTIFTRI)) {
       conflictingClients.push({
         ...client,
-        conflictReason: `El CUIT ${client.IDENTIFTRI} ya está en uso por otro cliente.`,
+        conflictReason: `El CUIT ${IDENTIFTRI} ya está en uso por otro cliente en la base de datos.`,
       });
-    } else {
-      newClients.push(client);
+      continue;
     }
+
+    if (processedCodes.has(COD_CLIENT)) {
+      conflictingClients.push({
+        ...client,
+        conflictReason: `El Cód. Cliente ${COD_CLIENT} está duplicado dentro del archivo.`,
+      });
+      continue;
+    }
+
+    if (processedCuits.has(IDENTIFTRI)) {
+      conflictingClients.push({
+        ...client,
+        conflictReason: `El CUIT ${IDENTIFTRI} está duplicado dentro del archivo.`,
+      });
+      continue;
+    }
+
+    newClients.push(client);
+    processedCodes.add(COD_CLIENT);
+    processedCuits.add(IDENTIFTRI);
   }
 
   res.status(200).json({
@@ -121,12 +152,12 @@ export const confirmClientMigration = asyncHandler(async (req, res) => {
   }
 
   const clientsToCreate = newClients.map((client) => {
-    const hashedPassword = bcrypt.hashSync(client.IDENTIFTRI, 10);
+    const hashedPassword = bcrypt.hashSync(String(client.IDENTIFTRI), 10);
     return {
       cod_client: client.COD_CLIENT,
       razon_soci: client.RAZON_SOCI,
       identiftri: client.IDENTIFTRI,
-      username: client.IDENTIFTRI,
+      username: String(client.IDENTIFTRI),
       password: hashedPassword,
     };
   });
@@ -136,12 +167,13 @@ export const confirmClientMigration = asyncHandler(async (req, res) => {
 
   try {
     await Client.insertMany(clientsToCreate, { ordered: false });
-    createdCount = newClients.length;
+    createdCount = clientsToCreate.length;
   } catch (error) {
     if (error.code === 11000 && error.writeErrors) {
       createdCount = error.result.nInserted;
-
-      const failedOperations = error.writeErrors.map((err) => err.op);
+      const failedOperations = error.writeErrors
+        .map((err) => err.op)
+        .filter((op) => op);
       duplicateClients = failedOperations.map((op) => ({
         COD_CLIENT: op.cod_client,
         IDENTIFTRI: op.identiftri,
@@ -163,31 +195,20 @@ export const confirmClientMigration = asyncHandler(async (req, res) => {
   });
 });
 
-/**
- * Función auxiliar para transformar el _id de MongoDB a un 'id' para el frontend.
- * @param {object} doc - Documento de Mongoose.
- * @returns {object} - Objeto plano con 'id' en lugar de '_id'.
- */
 const transformClientDocument = (doc) => {
   const plainObject = doc.toObject ? doc.toObject() : doc;
-  const { _id, ...rest } = plainObject;
+  const { _id, __v, ...rest } = plainObject;
   return { id: _id.toString(), ...rest };
 };
 
-// --- ENDPOINTS DEL CRUD ---
-
 /**
- * @desc    Obtener todos los clientes con paginación, filtros y ordenamiento.
+ * @desc    Obtener todos los clientes.
  * @route   GET /api/clients
  * @access  Private
  */
 export const getAllClients = asyncHandler(async (req, res) => {
   const clients = await Client.find();
-  const items = clients.map((client) => ({
-    ...client._doc,
-    id: client._doc._id.toString(),
-  }));
-
+  const items = clients.map((client) => transformClientDocument(client));
   res.status(200).json({ items });
 });
 
@@ -213,32 +234,39 @@ export const createNewClient = asyncHandler(async (req, res) => {
   const { cod_client, razon_soci, identiftri, username, password, active } =
     req.body;
 
-  if (!identiftri || !cod_client || razon_soci) {
-    handleError(
-      "Los campos Idetif. Tributario, Cód. Cliente y Razón social son obligatorios",
-      400
-    );
-  }
+  const finalUsername = username || String(identiftri);
+  const passwordToHash = password || String(identiftri);
+  const hashedPassword = bcrypt.hashSync(passwordToHash, 10);
 
   const duplicate = await Client.findOne({
-    $or: [{ cod_client }, { identiftri }],
+    $or: [{ cod_client }, { identiftri }, { username: finalUsername }],
   }).lean();
+
   if (duplicate) {
-    handleError("Ya existe un cliente con el mismo Código o CUIT.", 409);
+    if (duplicate.cod_client === cod_client) {
+      handleError(`Ya existe un cliente con el código '${cod_client}'.`, 409);
+    }
+    if (duplicate.identiftri === identiftri) {
+      handleError(`Ya existe un cliente con el CUIT '${identiftri}'.`, 409);
+    }
+    if (duplicate.username === finalUsername) {
+      handleError(
+        `El nombre de usuario '${finalUsername}' ya está en uso.`,
+        409
+      );
+    }
   }
 
-  const hashedPassword = bcrypt.hashSync(password || String(identiftri), 10);
   const newClient = new Client({
     cod_client,
     razon_soci,
     identiftri,
-    active: active ? true : false,
-    username: username || String(identiftri),
+    active,
+    username: finalUsername,
     password: hashedPassword,
   });
 
   const savedClient = await newClient.save();
-
   res.status(201).json(transformClientDocument(savedClient));
 });
 
@@ -249,7 +277,37 @@ export const createNewClient = asyncHandler(async (req, res) => {
  */
 export const updateClientById = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const updatedClient = await Client.findByIdAndUpdate(id, req.body, {
+  const { cod_client, identiftri, username, password } = req.body;
+
+  const duplicate = await Client.findOne({
+    $or: [{ cod_client }, { identiftri }, { username }],
+    _id: { $ne: id },
+  }).lean();
+
+  if (duplicate) {
+    if (duplicate.cod_client && duplicate.cod_client === cod_client) {
+      handleError(
+        `El código '${cod_client}' ya pertenece a otro cliente.`,
+        409
+      );
+    }
+    if (duplicate.identiftri && duplicate.identiftri === identiftri) {
+      handleError(`El CUIT '${identiftri}' ya pertenece a otro cliente.`, 409);
+    }
+    if (duplicate.username && duplicate.username === username) {
+      handleError(`El nombre de usuario '${username}' ya está en uso.`, 409);
+    }
+  }
+
+  const updateData = req.body;
+
+  if (password) {
+    updateData.password = bcrypt.hashSync(password, 10);
+  } else {
+    delete updateData.password;
+  }
+
+  const updatedClient = await Client.findByIdAndUpdate(id, updateData, {
     new: true,
   });
 
@@ -267,10 +325,15 @@ export const updateClientById = asyncHandler(async (req, res) => {
  */
 export const deleteClientById = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const deletedClient = await Client.findByIdAndDelete(id);
+  const client = await Client.findById(id);
 
-  if (!deletedClient) {
+  if (!client) {
     handleError("Cliente no encontrado para eliminar.", 404);
   }
-  res.status(204).send();
+
+  await client.deleteOne();
+
+  res
+    .status(200)
+    .json({ message: `Cliente '${client.razon_soci}' eliminado.` });
 });

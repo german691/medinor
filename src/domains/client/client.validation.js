@@ -1,12 +1,15 @@
 import Joi from "joi";
 
+/**
+ * Schema para validar los datos provenientes del archivo de carga masiva.
+ * Este schema es responsable de "limpiar" los datos de entrada (ej: quitar guiones del CUIT).
+ */
 export const clientObjectSchema = Joi.object({
   COD_CLIENT: Joi.string()
     .trim()
     .required()
     .custom((value, helpers) => {
       const saneado = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-
       const letras = (saneado.match(/[A-Z]/g) || []).join("");
       const numeros = (saneado.match(/[0-9]/g) || []).join("");
 
@@ -54,11 +57,62 @@ export const clientObjectSchema = Joi.object({
     }),
 });
 
-export const clientMigrationSchema = Joi.object({
-  clients: Joi.array().items(clientObjectSchema).min(1).required().messages({
-    "array.base": 'El campo "clients" debe ser un array.',
-    "array.min": "Se debe enviar al menos un cliente para procesar.",
-    "any.required":
-      'El campo "clients" es requerido en el cuerpo de la petición.',
+/**
+ * Schema para la creación de un cliente desde el CRUD.
+ * Espera que los datos ya vengan en el formato final y limpio.
+ */
+export const createClientSchema = Joi.object({
+  cod_client: Joi.string()
+    .uppercase()
+    .pattern(/^[A-Z]{3}[0-9]{3}$/)
+    .required()
+    .messages({
+      "string.pattern.base": `"Código de Cliente" debe tener el formato LLLNNN.`,
+      "any.required": `"Código de Cliente" es un campo obligatorio.`,
+    }),
+
+  razon_soci: Joi.string().uppercase().required().messages({
+    "any.required": `"Razón Social" es un campo obligatorio.`,
   }),
+
+  identiftri: Joi.string()
+    .pattern(/^[0-9]{11}$/)
+    .required()
+    .messages({
+      "string.base": `"CUIT" debe ser un string.`,
+      "string.pattern.base": `"CUIT" debe contener exactamente 11 dígitos numéricos.`,
+      "any.required": `"CUIT" es un campo obligatorio.`,
+    }),
+
+  username: Joi.string().allow("").optional(),
+  password: Joi.string().allow("").optional(),
+  active: Joi.boolean().default(true),
 });
+
+/**
+ * Schema para la actualización de un cliente desde el CRUD.
+ */
+export const updateClientSchema = Joi.object({
+  cod_client: Joi.string()
+    .uppercase()
+    .pattern(/^[A-Z]{3}[0-9]{3}$/)
+    .messages({
+      "string.pattern.base": `"Código de Cliente" debe tener el formato LLLNNN.`,
+    }),
+
+  razon_soci: Joi.string().uppercase(),
+
+  identiftri: Joi.string()
+    .pattern(/^[0-9]{11}$/)
+    .messages({
+      "string.pattern.base": `"CUIT" debe contener exactamente 11 dígitos numéricos.`,
+    }),
+
+  username: Joi.string().allow(""),
+  password: Joi.string().allow(""),
+  active: Joi.boolean(),
+})
+  .min(1)
+  .messages({
+    "object.min": "Debe proporcionar al menos un campo para actualizar.",
+  });

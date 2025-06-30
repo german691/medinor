@@ -1,24 +1,30 @@
+// Archivo: client.routes.js
+
 import express from "express";
 import {
   analyzeClients,
   confirmClientMigration,
   createNewClient,
-  deleteClientById,
   getAllClients,
   getClientById,
   updateClientById,
 } from "./client.controller.js";
+
 import { validateReqBody } from "../../interface/middleware/joi.middleware.js";
-import { clientMigrationSchema } from "./client.validation.js";
+
+import { createClientSchema, updateClientSchema } from "./client.validation.js";
+
 const router = express.Router();
 
-router.route("/").get(getAllClients).post(createNewClient);
+router
+  .route("/")
+  .get(getAllClients)
+  .post(validateReqBody(createClientSchema), createNewClient);
 
 router
   .route("/:id")
   .get(getClientById)
-  .put(updateClientById)
-  .delete(deleteClientById);
+  .put(validateReqBody(updateClientSchema), updateClientById);
 
 router.post("/analyze", analyzeClients);
 router.post("/make-migration", confirmClientMigration);
