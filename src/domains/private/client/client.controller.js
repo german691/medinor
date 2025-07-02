@@ -7,12 +7,7 @@ import {
   cleanRazonSoci,
 } from "../../../util/clientMigrationCleaner.js";
 import { clientObjectSchema } from "./client.validation.js";
-
-const handleError = (message, statusCode) => {
-  const error = new Error(message);
-  error.statusCode = statusCode;
-  throw error;
-};
+import handleError from "../../../util/handleError.js";
 
 /**
  * @desc    Consulta a la base de datos, devuelve los usuarios ya existentes o conflictivos.
@@ -148,7 +143,7 @@ export const confirmClientMigration = asyncHandler(async (req, res) => {
   const { newClients } = req.body.data;
 
   if (!newClients || newClients.length === 0) {
-    handleError("No se recibieron clientes válidos para crear.", 400);
+    return handleError("No se recibieron clientes válidos para crear.", 400);
   }
 
   const clientsToCreate = newClients.map((client) => {
@@ -195,16 +190,45 @@ export const confirmClientMigration = asyncHandler(async (req, res) => {
   });
 });
 
-/* convierte _id a id solo para consistencia */
-const transformClientDocument = (doc) => {
-  const plainObject = doc.toObject ? doc.toObject() : doc;
-  const { _id, __v, ...rest } = plainObject;
-  return { id: _id.toString(), ...rest };
-};
+/**
+ * @desc    Obtener clientes paginados.
+ * @route   GET /api/clients
+ * @access  Private
+ */
+export const getClients = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 25, filters = {}, sort = {} } = req.body;
+
+  const pageNumber = parseInt(page);
+  const pageSize = parseInt(limit);
+
+  try {
+    const skip = (pageNumber - 1) * pageSize;
+
+    const total = await Client.countDocuments(filters);
+
+    const clients = await Client.find(filters)
+      .sort(sort)
+      .skip(skip)
+      .limit(pageSize)
+      .lean();
+
+    const totalPages = Math.ceil(total / pageSize);
+
+    res.status(200).json({
+      page: pageNumber,
+      totalPages,
+      totalItems: total,
+      items: clients,
+    });
+  } catch (error) {
+    console.error("Error al obtener clientes:", error);
+    handleError("Error interno del servidor al obtener clientes.", 500);
+  }
+});
 
 /**
  * @desc    Obtener todos los clientes.
- * @route   GET /api/clients
+ * @route   GET /api/clients/all
  * @access  Private
  */
 export const getAllClients = asyncHandler(async (req, res) => {

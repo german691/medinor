@@ -7,14 +7,15 @@ import { endpointNotFound } from "./domains/public/status/status.controller.js";
 import { errorMiddleware } from "./interface/middleware/error.middleware.js";
 
 const app = express();
+
+app.use(express.json({ limit: "5mb" }));
+app.use(express.urlencoded({ limit: "5mb", extended: true }));
+
 conn.then(() => {
   console.log("MongoDB ready");
 });
 
-app.use(cors("*"));
-app.use(express.json({ limit: "5mb" }));
-app.use(express.urlencoded({ extended: true, limit: "5mb" }));
-app.use(express.urlencoded({ limit: "5mb", extended: true }));
+app.use(cors());
 
 app.use("/api", routes);
 

@@ -1,3 +1,4 @@
+import handleError from "../../../util/handleError.js";
 import { Lab } from "./lab.model.js";
 
 export const getLabs = async (req, res) => {
@@ -6,9 +7,6 @@ export const getLabs = async (req, res) => {
     res.status(200).json({ items: labs });
   } catch (error) {
     console.error("Error al obtener laboratorios:", error);
-    res.status(500).json({
-      message: "Error interno del servidor al obtener laboratorios.",
-      error: error.message,
-    });
+    handleError("Error interno del servidor al obtener laboratorios.", 500);
   }
 };

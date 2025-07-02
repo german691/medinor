@@ -3,8 +3,8 @@ import {
   analyzeClients,
   confirmClientMigration,
   createNewClient,
-  getAllClients,
   getClientById,
+  getClients,
   updateClientById,
 } from "./client.controller.js";
 
@@ -14,16 +14,14 @@ import { createClientSchema, updateClientSchema } from "./client.validation.js";
 
 const router = express.Router();
 
-router
-  .route("/")
-  .get(getAllClients)
-  .post(validateReqBody(createClientSchema), createNewClient);
-
-router
-  .route("/:id")
-  .get(getClientById)
-  .put(validateReqBody(updateClientSchema), updateClientById);
-
+router.post("/get", getClients);
+router.get("/get/:id", getClientById);
+router.post("/add", validateReqBody(createClientSchema), createNewClient);
+router.put(
+  "/update/:id",
+  validateReqBody(updateClientSchema),
+  updateClientById
+);
 router.post("/analyze", analyzeClients);
 router.post("/make-migration", confirmClientMigration);
 
