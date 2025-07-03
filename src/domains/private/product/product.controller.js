@@ -274,11 +274,16 @@ export const getProducts = asyncHandler(async (req, res) => {
 
   const skip = (pageNumber - 1) * pageSize;
 
+  const sortObj = {};
+  if (sort?.key && sort?.direction) {
+    sortObj[sort.key] = sort.direction;
+  }
+
   try {
     const total = await Product.countDocuments(filters);
 
     const products = await Product.find(filters)
-      .sort(sort)
+      .sort(sortObj)
       .skip(skip)
       .limit(pageSize)
       .populate("lab")

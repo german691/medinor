@@ -201,13 +201,18 @@ export const getClients = asyncHandler(async (req, res) => {
   const pageNumber = parseInt(page);
   const pageSize = parseInt(limit);
 
-  try {
-    const skip = (pageNumber - 1) * pageSize;
+  const skip = (pageNumber - 1) * pageSize;
 
+  const sortObj = {};
+  if (sort?.key && sort?.direction) {
+    sortObj[sort.key] = sort.direction;
+  }
+
+  try {
     const total = await Client.countDocuments(filters);
 
     const clients = await Client.find(filters)
-      .sort(sort)
+      .sort(sortObj)
       .skip(skip)
       .limit(pageSize)
       .lean();
