@@ -349,3 +349,117 @@ export const updateClientById = asyncHandler(async (req, res) => {
 
   res.status(200).json({ item: updatedClient });
 });
+
+/**
+ * @desc    Actualizar múltiples clientes.
+ * @route   PUT /api/clients/bulk-update
+ * @access  Private
+ */
+export const bulkUpdateClients = asyncHandler(async (req, res) => {
+  const clientsToUpdate = req.body;
+
+  if (!Array.isArray(clientsToUpdate) || clientsToUpdate.length === 0) {
+    handleError("Se espera un array de clientes para actualizar.", 400);
+  }
+
+  console.log(clientsToUpdate);
+
+  const updatedClients = [];
+  const errors = [];
+
+  for (const clientData of clientsToUpdate) {
+    const {
+      _id,
+      identiftri,
+      razon_soci,
+      username,
+      password,
+      active,
+      otherUpdateData,
+    } = clientData;
+
+    if (!_id) {
+      errors.push({
+        message: `Se requiere un _id para cada cliente en la actualización masiva.`,
+        client: clientData,
+      });
+      continue;
+    }
+
+    try {
+      const duplicate = await Client.findOne({
+        $or: [{ identiftri }, { username }],
+        $id: { $ne: _id },
+      }).lean();
+
+      console.log("duplicate:", duplicate);
+
+      if (duplicate) {
+        let duplicateMessage = "";
+        if (duplicate.cod_client && duplicate.cod_client === cod_client) {
+          duplicateMessage = `El código '${cod_client}' ya pertenece a otro cliente (ID: ${duplicate._id}).`;
+        } else if (
+          duplicate.identiftri &&
+          duplicate.identiftri === identiftri
+        ) {
+          duplicateMessage = `El CUIT '${identiftri}' ya pertenece a otro cliente (ID: ${duplicate._id}).`;
+        } else if (duplicate.username && duplicate.username === username) {
+          duplicateMessage = `El nombre de usuario '${username}' ya está en uso (ID: ${duplicate._id}).`;
+        }
+        errors.push({ message: duplicateMessage, client: clientData });
+        continue;
+      }
+
+      const updateData = { ...otherUpdateData };
+
+      if (identiftri && razon_soci && username && password) {
+        updateData.identiftri = identiftri;
+        updateData.razon_soci = razon_soci;
+        updateData.username = username;
+        updateData.password = await bcrypt.hash(password, 10);
+        updateData.active = active;
+      } else {
+        errors.push({
+          message: "No se recibieron los campos requeridos",
+          client: clientData,
+        });
+      }
+
+      const updatedClient = await Client.findByIdAndUpdate(
+        _id,
+        { $set: updateData },
+        { new: true, runValidators: true }
+      );
+
+      if (!updatedClient) {
+        errors.push({
+          message: `Cliente con ID ${_id} no encontrado para actualizar`,
+          client: clientData,
+        });
+      } else {
+        updatedClients.push(updatedClient);
+      }
+    } catch (error) {
+      errors.push({
+        message: `Error al procesar cliente con ID ${_id}: ${error.message}`,
+        client: clientData,
+      });
+      console.log(error);
+    }
+  }
+
+  if (errors.length > 0) {
+    res.status(207).json({
+      message: "Se han encontrado conflictos",
+      updatedCount: updatedClients.length,
+      errors: errors,
+      updatedItems: updatedClients,
+    });
+  } else {
+    res.status(200).json({
+      message: "Todos los clientes actualizados exitosamente",
+      updatedCount: updatedClients.length,
+      updatedItems: updatedClients,
+    });
+  }
+});

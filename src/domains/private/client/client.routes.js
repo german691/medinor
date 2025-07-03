@@ -1,6 +1,7 @@
 import express from "express";
 import {
   analyzeClients,
+  bulkUpdateClients,
   confirmClientMigration,
   createNewClient,
   getClientById,
@@ -17,6 +18,7 @@ const router = express.Router();
 router.post("/get", getClients);
 router.get("/get/:id", getClientById);
 router.post("/add", validateReqBody(createClientSchema), createNewClient);
+router.put("/update", bulkUpdateClients);
 router.put(
   "/update/:id",
   validateReqBody(updateClientSchema),
