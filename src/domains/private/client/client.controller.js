@@ -362,20 +362,17 @@ export const bulkUpdateClients = asyncHandler(async (req, res) => {
     handleError("Se espera un array de clientes para actualizar.", 400);
   }
 
-  console.log(clientsToUpdate);
-
   const updatedClients = [];
   const errors = [];
 
   for (const clientData of clientsToUpdate) {
     const {
       _id,
+      cod_client,
       identiftri,
-      razon_soci,
       username,
       password,
-      active,
-      otherUpdateData,
+      ...restOfClientData
     } = clientData;
 
     if (!_id) {
@@ -389,10 +386,8 @@ export const bulkUpdateClients = asyncHandler(async (req, res) => {
     try {
       const duplicate = await Client.findOne({
         $or: [{ identiftri }, { username }],
-        $id: { $ne: _id },
+        _id: { $ne: _id },
       }).lean();
-
-      console.log("duplicate:", duplicate);
 
       if (duplicate) {
         let duplicateMessage = "";
@@ -410,19 +405,15 @@ export const bulkUpdateClients = asyncHandler(async (req, res) => {
         continue;
       }
 
-      const updateData = { ...otherUpdateData };
+      const updateData = { ...restOfClientData };
 
-      if (identiftri && razon_soci && username && password) {
-        updateData.identiftri = identiftri;
-        updateData.razon_soci = razon_soci;
-        updateData.username = username;
+      if (cod_client !== undefined) updateData.cod_client = cod_client;
+      if (identiftri !== undefined) updateData.identiftri = identiftri;
+      if (username !== undefined) updateData.username = username;
+      if (password) {
         updateData.password = await bcrypt.hash(password, 10);
-        updateData.active = active;
-      } else {
-        errors.push({
-          message: "No se recibieron los campos requeridos",
-          client: clientData,
-        });
+      } else if (password === null) {
+        updateData.password = null;
       }
 
       const updatedClient = await Client.findByIdAndUpdate(
@@ -440,11 +431,20 @@ export const bulkUpdateClients = asyncHandler(async (req, res) => {
         updatedClients.push(updatedClient);
       }
     } catch (error) {
-      errors.push({
-        message: `Error al procesar cliente con ID ${_id}: ${error.message}`,
-        client: clientData,
-      });
-      console.log(error);
+      if (error.code === 11000) {
+        let field = Object.keys(error.keyValue)[0];
+        let value = error.keyValue[field];
+        let errorMessage = `El ${field} '${value}' ya existe para otro cliente.`;
+        errors.push({
+          message: errorMessage,
+          client: clientData,
+        });
+      } else {
+        errors.push({
+          message: `Error al procesar cliente con ID ${_id}: ${error.message}`,
+          client: clientData,
+        });
+      }
     }
   }
 
