@@ -225,6 +225,8 @@ export const getClients = asyncHandler(async (req, res) => {
       totalItems: total,
       items: clients,
     });
+
+    console.log({ page: pageNumber, totalPages, totalItems: total });
   } catch (error) {
     console.error("Error al obtener clientes:", error);
     handleError("Error interno del servidor al obtener clientes.", 500);
@@ -238,7 +240,7 @@ export const getClients = asyncHandler(async (req, res) => {
  */
 export const getAllClients = asyncHandler(async (req, res) => {
   const clients = await Client.find();
-  const items = clients.map((client) => transformClientDocument(client));
+  const items = clients.map((client) => client);
   res.status(200).json({ items });
 });
 
@@ -252,7 +254,7 @@ export const getClientById = asyncHandler(async (req, res) => {
   if (!client) {
     handleError("Cliente no encontrado.", 404);
   }
-  res.status(200).json(transformClientDocument(client));
+  res.status(200).json({ item: client });
 });
 
 /**
@@ -297,7 +299,7 @@ export const createNewClient = asyncHandler(async (req, res) => {
   });
 
   const savedClient = await newClient.save();
-  res.status(201).json(transformClientDocument(savedClient));
+  res.status(201).json({ item: savedClient });
 });
 
 /**
@@ -345,5 +347,5 @@ export const updateClientById = asyncHandler(async (req, res) => {
     handleError("Cliente no encontrado para actualizar.", 404);
   }
 
-  res.status(200).json(transformClientDocument(updatedClient));
+  res.status(200).json({ item: updatedClient });
 });
