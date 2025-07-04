@@ -191,27 +191,57 @@ export const confirmClientMigration = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Obtener clientes paginados.
+ * @desc    Obtener clientes paginados con posibilidad de búsqueda
  * @route   GET /api/clients
  * @access  Private
  */
 export const getClients = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 25, filters = {}, sort = {} } = req.body;
+  const {
+    page = 1,
+    limit = 25,
+    filters = {},
+    sort = {},
+    search = "",
+  } = req.body;
 
+  // paginación
   const pageNumber = parseInt(page);
   const pageSize = parseInt(limit);
 
   const skip = (pageNumber - 1) * pageSize;
 
+  // ordenamiento básico
   const sortObj = {};
   if (sort?.key && sort?.direction) {
     sortObj[sort.key] = sort.direction;
   }
 
-  try {
-    const total = await Client.countDocuments(filters);
+  // lógica de búsqueda
+  const searchableFields = [
+    "cod_client",
+    "razon_soci",
+    "identiftri",
+    "username",
+  ];
 
-    const clients = await Client.find(filters)
+  let searchFilter = {};
+  if (search) {
+    searchFilter = {
+      $or: searchableFields.map((field) => ({
+        [field]: { $regex: search, $options: "i" },
+      })),
+    };
+  }
+
+  const finalFilters = {
+    ...filters,
+    ...(search ? searchFilter : {}),
+  };
+
+  try {
+    const total = await Client.countDocuments(finalFilters);
+
+    const clients = await Client.find(finalFilters)
       .sort(sortObj)
       .skip(skip)
       .limit(pageSize)

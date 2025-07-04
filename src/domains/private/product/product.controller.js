@@ -261,13 +261,19 @@ export const confirmProductMigration = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc Endpoint para obtener una lista de todos los productos.
+ * @desc Obtener productos paginados con posibilidad de búsqueda.
  * @route GET /api/products
  * @access Public
  */
 export const getProducts = asyncHandler(async (req, res) => {
   console.log(req.body);
-  const { page = 1, limit = 25, filters = {}, sort = {} } = req.body;
+  const {
+    page = 1,
+    limit = 25,
+    filters = {},
+    sort = {},
+    search = "",
+  } = req.body;
 
   const pageNumber = parseInt(page);
   const pageSize = parseInt(limit);
@@ -279,10 +285,35 @@ export const getProducts = asyncHandler(async (req, res) => {
     sortObj[sort.key] = sort.direction;
   }
 
-  try {
-    const total = await Product.countDocuments(filters);
+  const searchableFields = ["code", "notes", "desc", "extra_desc"];
 
-    const products = await Product.find(filters)
+  let searchFilter = {};
+  if (search) {
+    const matchingLabs = await Lab.find({
+      name: { $regex: search, $options: "i" },
+    }).select("_id");
+
+    const labIds = matchingLabs.map((lab) => lab._id);
+
+    searchFilter = {
+      $or: [
+        ...searchableFields.map((field) => ({
+          [field]: { $regex: search, $options: "i" },
+        })),
+        { lab: { $in: labIds } },
+      ],
+    };
+  }
+
+  const finalFilters = {
+    ...filters,
+    ...(search ? searchFilter : {}),
+  };
+
+  try {
+    const total = await Product.countDocuments(finalFilters);
+
+    const products = await Product.find(finalFilters)
       .sort(sortObj)
       .skip(skip)
       .limit(pageSize)
@@ -292,7 +323,7 @@ export const getProducts = asyncHandler(async (req, res) => {
     const formattedProducts = products.map((p) => ({
       ...p,
       id: p._id.toString(),
-      lab: p.lab,
+      lab: p.lab.name,
     }));
 
     const totalPages = Math.ceil(total / pageSize);
@@ -477,5 +508,123 @@ export const updateProduct = asyncHandler(async (req, res) => {
       handleError("Ya existe un producto con el código proporcionado.", 409);
     }
     handleError("Error interno del servidor al actualizar el producto.", 500);
+  }
+});
+
+/**
+ * @desc    Actualizar múltiples productos.
+ * @route   PUT /api/products/bulk-update
+ * @access  Private
+ */
+export const bulkUpdateProducts = asyncHandler(async (req, res) => {
+  const productsToUpdate = req.body;
+
+  if (!Array.isArray(productsToUpdate) || productsToUpdate.length === 0) {
+    handleError("Se espera un array de productos para actualizar.", 400);
+  }
+
+  const updatedProducts = [];
+  const errors = [];
+
+  for (const productData of productsToUpdate) {
+    const {
+      _id,
+      code,
+      desc,
+      extra_desc,
+      notes,
+      medinor_price,
+      public_price,
+      price,
+      iva,
+      listed,
+      lab,
+      ...restOfProductData
+    } = productData;
+
+    if (!_id) {
+      errors.push({
+        message: `Se requiere un _id para cada producto en la actualización masiva.`,
+        product: productData,
+      });
+      continue;
+    }
+
+    try {
+      const duplicate = await Product.findOne({
+        $or: [{ code }],
+        _id: { $ne: _id },
+      }).lean();
+
+      if (duplicate) {
+        let duplicateMessage = "";
+        if (duplicate.code && duplicate.code === code) {
+          duplicateMessage = `El código '${code}' ya pertenece a otro producto. (ID: ${duplicate._id}).`;
+        }
+        errors.push({ message: duplicateMessage, product: productData });
+        continue;
+      }
+
+      const updateData = { ...restOfProductData };
+
+      if (typeof lab === "string" && lab.trim() !== "") {
+        const labDoc = await Lab.findOne({ name: lab.trim() });
+        if (!labDoc) {
+          errors.push({
+            message: `No se encontró el laboratorio con nombre '${lab}'.`,
+            product: productData,
+          });
+          continue;
+        }
+        updateData.lab = labDoc._id;
+      }
+
+      if (code !== undefined) updateData.code = code;
+
+      const updatedClient = await Product.findByIdAndUpdate(
+        _id,
+        { $set: updateData },
+        { new: true, runValidators: true }
+      );
+
+      if (!updatedClient) {
+        errors.push({
+          message: `Producto con ID ${_id} no encontrado para actualizar`,
+          product: productData,
+        });
+      } else {
+        updatedProducts.push(updatedClient);
+      }
+    } catch (error) {
+      if (error.code === 11000) {
+        let field = Object.keys(error.keyValue)[0];
+        let value = error.keyValue[field];
+        let errorMessage = `El ${field} '${value}' ya existe para otro producto.`;
+        errors.push({
+          message: errorMessage,
+          product: productData,
+        });
+      } else {
+        errors.push({
+          message: `Error al procesar producto con ID ${_id}: ${error.message}`,
+          product: productData,
+        });
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    res.status(207).json({
+      message: "Se han encontrado conflictos",
+      updatedCount: updatedProducts.length,
+      errors: errors,
+      updatedItems: updatedProducts,
+    });
+  } else {
+    res.status(200).json({
+      message: "Todos los productos actualizados exitosamente",
+      updatedCount: updatedProducts.length,
+      updatedItems: updatedProducts,
+    });
   }
 });
