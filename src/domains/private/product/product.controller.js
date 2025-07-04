@@ -393,17 +393,14 @@ export const createProduct = asyncHandler(async (req, res) => {
         400
       );
     }
+
     if (!mongoose.Types.ObjectId.isValid(lab)) {
-      return res
-        .status(400)
-        .json({ message: "ID de laboratorio proporcionado no es válido." });
+      handleError("ID de laboratorio proporcionado no es válido.", 400);
     }
 
     const existingProduct = await Product.findOne({ code: code });
     if (existingProduct) {
-      return res
-        .status(409)
-        .json({ message: `Ya existe un producto con el código '${code}'.` });
+      handleError(`Ya existe un producto con el código '${code}'.`, 409);
     }
 
     const newProduct = new Product({
@@ -441,7 +438,7 @@ export const createProduct = asyncHandler(async (req, res) => {
     });
   } catch (error) {
     console.error("Error al crear producto:", error);
-    handleError("Error interno del servidor al obtener productos.", 500);
+    handleError("Error interno del servidor al crear producto.", 500);
   }
 });
 

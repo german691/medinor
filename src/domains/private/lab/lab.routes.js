@@ -1,8 +1,9 @@
 import express from "express";
-import { getLabs } from "./lab.controller.js";
+import { createLab, getLabs } from "./lab.controller.js";
 
 const router = express.Router();
 
 router.get("/", getLabs);
+router.post("/", createLab);
 
 export default router;
