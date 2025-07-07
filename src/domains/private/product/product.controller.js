@@ -32,7 +32,9 @@ export const analyzeProducts = asyncHandler(async (req, res) => {
 
   const productsToAnalyze = productsData.filter((product) => {
     const labName = normalizeName(product.lab);
-    return labName !== "BAJA";
+    const categoryName = normalizeName(product.category);
+
+    return labName !== "BAJA" && categoryName !== "BAJA";
   });
 
   const totalFilteredOut = productsData.length - productsToAnalyze.length;
@@ -325,7 +327,7 @@ export const confirmProductMigration = asyncHandler(async (req, res) => {
 
 /**
  * @desc Obtener productos paginados con posibilidad de búsqueda.
- * @route GET /api/products
+ * @route POST /api/products
  * @access Public
  */
 export const getProducts = asyncHandler(async (req, res) => {
@@ -391,13 +393,26 @@ export const getProducts = asyncHandler(async (req, res) => {
       .populate("category")
       .lean();
 
-    const formattedProducts = products.map((p) => ({
-      ...p,
-      id: p._id.toString(),
-      lab: p.lab.name,
-      category: p.category.name,
-    }));
+    const formattedProducts = products.map((p) => {
+      let discountValue = 0;
+      if (
+        p.medinor_price != null &&
+        p.public_price != null &&
+        p.public_price !== 0
+      ) {
+        discountValue = parseFloat(
+          (p.medinor_price / p.public_price - 1).toFixed(4)
+        );
+      }
 
+      return {
+        ...p,
+        id: p._id.toString(),
+        lab: p.lab ? p.lab.name : null,
+        category: p.category ? p.category.name : null,
+        discount: discountValue,
+      };
+    });
     const totalPages = Math.ceil(total / pageSize);
 
     res.status(200).json({
