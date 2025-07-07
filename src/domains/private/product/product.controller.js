@@ -3,18 +3,19 @@ import { Product } from "./product.model.js";
 import mongoose from "mongoose";
 import asyncHandler from "express-async-handler";
 import handleError from "../../../util/handleError.js";
+import { Category } from "../category/category.model.js";
 
 const normalizeLabName = (name) => {
   return name ? String(name).trim().toUpperCase() : null;
 };
 
 /**
- * @desc   Endpoint para analizar los datos de productos cargados.
- *         - Verifica y crea laboratorios si no existen.
- *         - Clasifica los productos en nuevos, existentes, con conflictos o inválidos.
- *         - Devuelve un resumen para que el frontend lo revise.
- * @route  POST /api/products/analyze
- * @access Private
+ * @desc    Endpoint para analizar los datos de productos cargados.
+ * - Verifica y crea laboratorios y categorías si no existen.
+ * - Clasifica los productos en nuevos, existentes, con conflictos o inválidos.
+ * - Devuelve un resumen para que el frontend lo revise.
+ * @route   POST /api/products/analyze
+ * @access  Private
  */
 export const analyzeProducts = asyncHandler(async (req, res) => {
   const { products: productsData } = req.body;
@@ -26,8 +27,11 @@ export const analyzeProducts = asyncHandler(async (req, res) => {
     );
   }
 
+  const normalizeName = (name) =>
+    name ? String(name).trim().toUpperCase() : "";
+
   const productsToAnalyze = productsData.filter((product) => {
-    const labName = normalizeLabName(product.lab);
+    const labName = normalizeName(product.lab);
     return labName !== "BAJA";
   });
 
@@ -61,17 +65,19 @@ export const analyzeProducts = asyncHandler(async (req, res) => {
   const labsMap = new Map();
   const labNamesMap = new Map();
   const newLabsCreated = [];
-  const productsWithErrors = [];
 
+  const categoriesMap = new Map();
+  const categoryNamesMap = new Map();
+  const newCategoriesCreated = [];
+
+  const productsWithErrors = [];
   const newProductsForFrontend = [];
   const currentProductsForFrontend = [];
   const conflictingProductsForFrontend = [];
-
   const newProductsForMigration = [];
 
-  // --- 1. Procesar y asegurar la existencia de Laboratorios ---
   const uniqueLabNames = new Set(
-    productsToAnalyze.map((p) => normalizeLabName(p.lab)).filter(Boolean)
+    productsToAnalyze.map((p) => normalizeName(p.lab)).filter(Boolean)
   );
 
   for (const labName of uniqueLabNames) {
@@ -89,12 +95,35 @@ export const analyzeProducts = asyncHandler(async (req, res) => {
     }
   }
 
-  // --- 2. Analizar y Clasificar Productos ---
+  const uniqueCategoryNames = new Set(
+    productsToAnalyze.map((p) => normalizeName(p.category)).filter(Boolean)
+  );
+
+  for (const categoryName of uniqueCategoryNames) {
+    try {
+      let category = await Category.findOne({ name: categoryName });
+      if (!category) {
+        category = new Category({ name: categoryName });
+        await category.save();
+        newCategoriesCreated.push(category.name);
+      }
+      categoriesMap.set(category.name, category._id);
+      categoryNamesMap.set(category._id.toString(), category.name);
+    } catch (categoryError) {
+      console.error(
+        `Error al procesar categoría ${categoryName}:`,
+        categoryError
+      );
+    }
+  }
+
   for (const productData of productsToAnalyze) {
     try {
       const code = String(productData.code || "").trim();
-      const labNameFromCsv = normalizeLabName(productData.lab);
+      const labNameFromCsv = normalizeName(productData.lab);
+      const categoryNameFromCsv = normalizeName(productData.category);
       const labId = labsMap.get(labNameFromCsv);
+      const categoryId = categoriesMap.get(categoryNameFromCsv);
 
       if (!code) {
         productsWithErrors.push({
@@ -112,6 +141,15 @@ export const analyzeProducts = asyncHandler(async (req, res) => {
         });
         continue;
       }
+      if (!categoryId) {
+        productsWithErrors.push({
+          data: productData,
+          errors: [
+            `Categoría '${productData.category}' no encontrada o no pudo ser creada.`,
+          ],
+        });
+        continue;
+      }
       if (!productData.desc) {
         productsWithErrors.push({
           data: productData,
@@ -124,6 +162,7 @@ export const analyzeProducts = asyncHandler(async (req, res) => {
         code: code,
         notes: productData.notes || null,
         lab: labId,
+        category: categoryId,
         desc: productData.desc || null,
         extra_desc: productData.extra_desc || null,
         iva: productData.iva,
@@ -133,19 +172,25 @@ export const analyzeProducts = asyncHandler(async (req, res) => {
         imageUrl: productData.imageUrl || null,
       };
 
-      const existingProduct = await Product.findOne({ code: code });
+      const existingProduct = await Product.findOne({ code: code }).populate(
+        "category"
+      );
 
       if (existingProduct) {
         if (
           existingProduct.desc !== productToProcess.desc ||
-          !existingProduct.lab.equals(labId)
+          !existingProduct.lab.equals(labId) ||
+          !existingProduct.category.equals(categoryId)
         ) {
           conflictingProductsForFrontend.push({
             ...productData,
             lab:
               labNamesMap.get(existingProduct.lab.toString()) ||
               productData.lab,
-            conflictReason: `Producto con código '${code}' ya existe con descripción o laboratorio diferente.`,
+            category:
+              categoryNamesMap.get(existingProduct.category.toString()) ||
+              productData.category,
+            conflictReason: `Producto con código '${code}' ya existe con descripción, laboratorio o categoría diferente.`,
           });
         } else {
           currentProductsForFrontend.push({
@@ -153,6 +198,9 @@ export const analyzeProducts = asyncHandler(async (req, res) => {
             lab:
               labNamesMap.get(existingProduct.lab.toString()) ||
               productData.lab,
+            category:
+              categoryNamesMap.get(existingProduct.category.toString()) ||
+              productData.category,
           });
         }
       } else {
@@ -161,7 +209,9 @@ export const analyzeProducts = asyncHandler(async (req, res) => {
         newProductsForFrontend.push({
           ...productToProcess,
           lab: labNameFromCsv,
+          category: categoryNameFromCsv,
           labObjectId: labId.toString(),
+          categoryObjectId: categoryId.toString(),
         });
       }
     } catch (productAnalysisError) {
@@ -202,8 +252,10 @@ export const analyzeProducts = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc Endpoint para confirmar y ejecutar la migración de productos.
- * @route POST /api/products/make-migration
+ * @desc    Endpoint para confirmar y ejecutar la migración de productos.
+ * - Valida que los IDs de laboratorio y categoría sean correctos.
+ * - Crea los nuevos productos en la base de datos.
+ * @route   POST /api/products/make-migration
  * @access  Private
  */
 export const confirmProductMigration = asyncHandler(async (req, res) => {
@@ -225,7 +277,18 @@ export const confirmProductMigration = asyncHandler(async (req, res) => {
         ) {
           migrationErrors.push({
             data: productData,
-            error: "ID de laboratorio inválido antes de la creación.",
+            error: "ID de laboratorio inválido o ausente.",
+          });
+          continue;
+        }
+
+        if (
+          !productData.category ||
+          !mongoose.Types.ObjectId.isValid(productData.category)
+        ) {
+          migrationErrors.push({
+            data: productData,
+            error: "ID de categoría inválido o ausente.",
           });
           continue;
         }
@@ -245,8 +308,8 @@ export const confirmProductMigration = asyncHandler(async (req, res) => {
       }
     }
 
-    res.status(200).json({
-      message: "Migración de productos completada exitosamente.",
+    res.status(201).json({
+      message: "Migración de productos completada.",
       data: {
         createdCount: createdCount,
         migrationErrors: migrationErrors,
@@ -254,7 +317,7 @@ export const confirmProductMigration = asyncHandler(async (req, res) => {
     });
   } catch (error) {
     console.error("Error general durante la migración de productos:", error);
-    handleError("Error interno del servidor al ejecutar la migración", 500, {
+    handleError("Error interno del servidor al ejecutar la migración.", 500, {
       migrationErrors: migrationErrors,
     });
   }
@@ -295,12 +358,19 @@ export const getProducts = asyncHandler(async (req, res) => {
 
     const labIds = matchingLabs.map((lab) => lab._id);
 
+    const matchingCategories = await Category.find({
+      name: { $regex: search, $options: "i" },
+    }).select("_id");
+
+    const categoryIds = matchingCategories.map((category) => category._id);
+
     searchFilter = {
       $or: [
         ...searchableFields.map((field) => ({
           [field]: { $regex: search, $options: "i" },
         })),
         { lab: { $in: labIds } },
+        { category: { $in: categoryIds } },
       ],
     };
   }
@@ -318,12 +388,14 @@ export const getProducts = asyncHandler(async (req, res) => {
       .skip(skip)
       .limit(pageSize)
       .populate("lab")
+      .populate("category")
       .lean();
 
     const formattedProducts = products.map((p) => ({
       ...p,
       id: p._id.toString(),
       lab: p.lab.name,
+      category: p.category.name,
     }));
 
     const totalPages = Math.ceil(total / pageSize);
@@ -378,6 +450,7 @@ export const createProduct = asyncHandler(async (req, res) => {
       code,
       notes,
       lab,
+      category,
       desc,
       extra_desc,
       iva,
@@ -388,25 +461,30 @@ export const createProduct = asyncHandler(async (req, res) => {
 
     console.log(req.body);
 
-    if (!code || !desc || !lab) {
+    if (!code || !desc || !lab || !category) {
       handleError(
-        "Código, descripción y ID de laboratorio son campos requeridos.",
+        "Código, descripción, laboratorio y categoría son campos requeridos.",
         400
       );
     }
 
-    // LOGICA ANTIGUA
-    // esto antes usaba la ID de lab, pero ahora el front pasa el nombre
-    // if (!mongoose.Types.ObjectId.isValid(lab)) {
-    //   handleError("ID de laboratorio proporcionado no es válido.", 400);
-    // }
-
     const labIsValid = await Lab.findOne({ name: lab });
     if (!labIsValid) {
-      handleError(`No se proporcionó un nombre de laboratorio válido'.`, 400);
+      handleError(
+        `No se proporcionó un nombre de laboratorio válido: '${lab}'.`,
+        400
+      );
     }
-
     const labId = labIsValid._id;
+
+    const categoryIsValid = await Category.findOne({ name: category });
+    if (!categoryIsValid) {
+      handleError(
+        `No se proporcionó un nombre de categoría válido: '${category}'.`,
+        400
+      );
+    }
+    const categoryId = categoryIsValid._id;
 
     const existingProduct = await Product.findOne({ code: code });
     if (existingProduct) {
@@ -417,23 +495,26 @@ export const createProduct = asyncHandler(async (req, res) => {
       code,
       notes,
       lab: labId,
+      category: categoryId,
       desc,
       extra_desc,
       iva,
       medinor_price,
       public_price,
       price,
-      // imageUrl,
     });
     await newProduct.save();
 
     const createdProduct = await Product.findById(newProduct._id)
       .populate("lab")
+      .populate("category")
       .lean();
+
     const formattedCreatedProduct = {
       ...createdProduct,
       id: createdProduct._id.toString(),
-      lab: createdProduct.lab,
+      lab: createdProduct.lab ? createdProduct.lab.name : null,
+      category: createdProduct.category ? createdProduct.category.name : null,
       createdAt: createdProduct.createdAt
         ? createdProduct.createdAt.toISOString()
         : null,
@@ -537,7 +618,7 @@ export const bulkUpdateProducts = asyncHandler(async (req, res) => {
   const errors = [];
 
   for (const productData of productsToUpdate) {
-    const { _id, code, lab } = productData;
+    const { _id, code, lab, category } = productData; // Destructure category
 
     if (!_id) {
       errors.push({
@@ -586,6 +667,29 @@ export const bulkUpdateProducts = asyncHandler(async (req, res) => {
             updateData.lab = labDoc._id;
           } else if (productData.lab === null) {
             updateData.lab = null;
+          }
+          continue;
+        }
+
+        // New: Handle 'category' field similar to 'lab'
+        if (key === "category") {
+          if (
+            typeof productData.category === "string" &&
+            productData.category.trim() !== ""
+          ) {
+            const categoryDoc = await Category.findOne({
+              name: productData.category.trim(),
+            });
+            if (!categoryDoc) {
+              errors.push({
+                message: `No se encontró la categoría con nombre '${productData.category}'.`,
+                product: productData,
+              });
+              continue;
+            }
+            updateData.category = categoryDoc._id;
+          } else if (productData.category === null) {
+            updateData.category = null;
           }
           continue;
         }

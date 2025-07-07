@@ -5,7 +5,6 @@ import { Lab } from "./lab.model.js";
 export const getLabs = asyncHandler(async (req, res) => {
   const labs = await Lab.find().lean();
   const mappedLabs = labs.map((l) => ({ lab: l.name }));
-  console.log(labs);
   res.status(200).json({ items: mappedLabs });
 });
 
@@ -25,7 +24,7 @@ export const createLab = asyncHandler(async (req, res) => {
     const newLab = new Lab({ name: name });
     await newLab.save();
 
-    const createdLab = await Lab.findById(newProduct._id);
+    const createdLab = await Lab.findById(newLab._id);
 
     res
       .status(201)
