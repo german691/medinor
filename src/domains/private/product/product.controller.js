@@ -342,7 +342,7 @@ export const getProducts = asyncHandler(async (req, res) => {
 
 /**
  * @desc Endpoint para obtener un solo producto por su ID.
- * @route GET /api/clients/:id
+ * @route GET /api/products/:id
  * @access Public
  */
 export const getProductById = asyncHandler(async (req, res) => {
@@ -384,8 +384,9 @@ export const createProduct = asyncHandler(async (req, res) => {
       medinor_price,
       public_price,
       price,
-      imageUrl,
     } = req.body;
+
+    console.log(req.body);
 
     if (!code || !desc || !lab) {
       handleError(
@@ -394,9 +395,18 @@ export const createProduct = asyncHandler(async (req, res) => {
       );
     }
 
-    if (!mongoose.Types.ObjectId.isValid(lab)) {
-      handleError("ID de laboratorio proporcionado no es válido.", 400);
+    // LOGICA ANTIGUA
+    // esto antes usaba la ID de lab, pero ahora el front pasa el nombre
+    // if (!mongoose.Types.ObjectId.isValid(lab)) {
+    //   handleError("ID de laboratorio proporcionado no es válido.", 400);
+    // }
+
+    const labIsValid = await Lab.findOne({ name: lab });
+    if (!labIsValid) {
+      handleError(`No se proporcionó un nombre de laboratorio válido'.`, 400);
     }
+
+    const labId = labIsValid._id;
 
     const existingProduct = await Product.findOne({ code: code });
     if (existingProduct) {
@@ -406,14 +416,14 @@ export const createProduct = asyncHandler(async (req, res) => {
     const newProduct = new Product({
       code,
       notes,
-      lab,
+      lab: labId,
       desc,
       extra_desc,
       iva,
       medinor_price,
       public_price,
       price,
-      imageUrl,
+      // imageUrl,
     });
     await newProduct.save();
 
@@ -509,35 +519,25 @@ export const updateProduct = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Actualizar múltiples productos.
+ * @desc    Actualiza múltiples productos.
  * @route   PUT /api/products/bulk-update
  * @access  Private
  */
 export const bulkUpdateProducts = asyncHandler(async (req, res) => {
   const productsToUpdate = req.body;
 
+  console.log("product update control (datos recibidos):", productsToUpdate);
+
   if (!Array.isArray(productsToUpdate) || productsToUpdate.length === 0) {
     handleError("Se espera un array de productos para actualizar.", 400);
+    return;
   }
 
   const updatedProducts = [];
   const errors = [];
 
   for (const productData of productsToUpdate) {
-    const {
-      _id,
-      code,
-      desc,
-      extra_desc,
-      notes,
-      medinor_price,
-      public_price,
-      price,
-      iva,
-      listed,
-      lab,
-      ...restOfProductData
-    } = productData;
+    const { _id, code, lab } = productData;
 
     if (!_id) {
       errors.push({
@@ -548,49 +548,76 @@ export const bulkUpdateProducts = asyncHandler(async (req, res) => {
     }
 
     try {
-      const duplicate = await Product.findOne({
-        $or: [{ code }],
-        _id: { $ne: _id },
-      }).lean();
+      if (code !== undefined) {
+        const duplicate = await Product.findOne({
+          code: code,
+          _id: { $ne: _id },
+        }).lean();
 
-      if (duplicate) {
-        let duplicateMessage = "";
-        if (duplicate.code && duplicate.code === code) {
-          duplicateMessage = `El código '${code}' ya pertenece a otro producto. (ID: ${duplicate._id}).`;
-        }
-        errors.push({ message: duplicateMessage, product: productData });
-        continue;
-      }
-
-      const updateData = { ...restOfProductData };
-
-      if (typeof lab === "string" && lab.trim() !== "") {
-        const labDoc = await Lab.findOne({ name: lab.trim() });
-        if (!labDoc) {
+        if (duplicate) {
           errors.push({
-            message: `No se encontró el laboratorio con nombre '${lab}'.`,
+            message: `El código '${code}' ya pertenece a otro producto. (ID: ${duplicate._id}).`,
             product: productData,
           });
           continue;
         }
-        updateData.lab = labDoc._id;
       }
 
-      if (code !== undefined) updateData.code = code;
+      const updateData = {};
 
-      const updatedClient = await Product.findByIdAndUpdate(
+      for (const key in productData) {
+        if (key === "_id") {
+          continue;
+        }
+
+        if (key === "lab") {
+          if (
+            typeof productData.lab === "string" &&
+            productData.lab.trim() !== ""
+          ) {
+            const labDoc = await Lab.findOne({ name: productData.lab.trim() });
+            if (!labDoc) {
+              errors.push({
+                message: `No se encontró el laboratorio con nombre '${productData.lab}'.`,
+                product: productData,
+              });
+              continue;
+            }
+            updateData.lab = labDoc._id;
+          } else if (productData.lab === null) {
+            updateData.lab = null;
+          }
+          continue;
+        }
+
+        if (productData[key] !== undefined) {
+          updateData[key] = productData[key];
+        }
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        errors.push({
+          message: `No se proporcionaron campos válidos para actualizar el producto con ID ${_id}.`,
+          product: productData,
+        });
+        continue;
+      }
+
+      console.log("updateData para producto", _id, ":", updateData);
+
+      const up = await Product.findByIdAndUpdate(
         _id,
         { $set: updateData },
         { new: true, runValidators: true }
       );
 
-      if (!updatedClient) {
+      if (!up) {
         errors.push({
-          message: `Producto con ID ${_id} no encontrado para actualizar`,
+          message: `Producto con ID ${_id} no encontrado para actualizar.`,
           product: productData,
         });
       } else {
-        updatedProducts.push(updatedClient);
+        updatedProducts.push(up);
       }
     } catch (error) {
       if (error.code === 11000) {
@@ -610,16 +637,18 @@ export const bulkUpdateProducts = asyncHandler(async (req, res) => {
     }
   }
 
+  console.log("datos transformados (productos actualizados):", updatedProducts);
+
   if (errors.length > 0) {
     res.status(207).json({
-      message: "Se han encontrado conflictos",
+      message: "Se han encontrado conflictos durante la actualización masiva.",
       updatedCount: updatedProducts.length,
       errors: errors,
       updatedItems: updatedProducts,
     });
   } else {
     res.status(200).json({
-      message: "Todos los productos actualizados exitosamente",
+      message: "Todos los productos actualizados exitosamente.",
       updatedCount: updatedProducts.length,
       updatedItems: updatedProducts,
     });
