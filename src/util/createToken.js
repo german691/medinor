@@ -5,7 +5,7 @@ const { TOKEN_KEY, TOKEN_EXPIRY } = process.env;
 const createToken = async (
   payload,
   key = TOKEN_KEY,
-  expiresIn = TOKEN_EXPIRY
+  expiresIn = TOKEN_EXPIRY || "72h"
 ) => {
   try {
     const token = jsonwebtoken.sign(payload, key, {

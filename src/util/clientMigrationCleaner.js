@@ -1,18 +1,16 @@
-// src/utils/dataCleaner.js
-
 /**
  * Limpia y normaliza el Cód. Cliente.
  * Extrae solo letras y números, los pasa a mayúsculas y los une.
  * @param {*} rawCod - El valor crudo del Cód. Cliente.
- * @returns {string} El Cód. Cliente saneado.
+ * @returns {string} El Cód. Cliente sanitizado.
  */
 export const cleanCodClient = (rawCod) => {
   if (typeof rawCod !== "string" && typeof rawCod !== "number") return "";
-  const saneado = String(rawCod)
+  const sanitized = String(rawCod)
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
-  const letras = (saneado.match(/[A-Z]/g) || []).join("");
-  const numeros = (saneado.match(/[0-9]/g) || []).join("");
+  const letras = (sanitized.match(/[A-Z]/g) || []).join("");
+  const numeros = (sanitized.match(/[0-9]/g) || []).join("");
   return letras + numeros;
 };
 

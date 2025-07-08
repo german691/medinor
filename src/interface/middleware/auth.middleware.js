@@ -2,27 +2,30 @@ import jsonwebtoken from "jsonwebtoken";
 
 const { TOKEN_KEY } = process.env;
 
-const authentication = (roles) => {
+const auth = (permissions) => {
   return (req, res, next) => {
-    const token = req.headers["x-access-token"];
+    const token =
+      req.headers["x-access-token"] ||
+      req.headers["x-admin-token"] ||
+      req.headers["authorization"];
 
     if (!token) {
-      return res.status(403).json({ message: "token not provided" });
+      return res.status(403).send("An authentication token is required");
     }
 
     try {
       const decodedToken = jsonwebtoken.verify(token, TOKEN_KEY);
-      req.user = decodedToken;
+      req.currentUser = decodedToken;
 
-      if (roles && ![].concat(roles).includes(req.user.role)) {
-        return res.status(401).json({ message: "unauthorized" });
+      if (permissions && !permissions.includes(req.currentUser.userType)) {
+        return res.status(401).send("Unauthorized access");
       }
 
       return next();
     } catch (error) {
-      return res.status(401).json({ message: "invalid token" });
+      return res.status(401).send("Invalid token provided");
     }
   };
 };
 
-export default authentication;
+export default auth;
