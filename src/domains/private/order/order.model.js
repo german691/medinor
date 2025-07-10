@@ -1,5 +1,16 @@
 import mongoose from "mongoose";
-import { Counter } from "./counter.model";
+import { Counter } from "./counter.model.js";
+
+const OrderStatus = {
+  PENDIENTE: "pendiente",
+  EN_REVISION: "en_revision",
+  APROBADO: "aprobado",
+  PREPARANDO: "preparando",
+  ENVIADO: "enviado",
+  ENTREGADO: "entregado",
+  CANCELADO: "cancelado",
+  RECHAZADO: "rechazado",
+};
 
 const orderItemSchema = new mongoose.Schema({
   product: {
@@ -9,6 +20,8 @@ const orderItemSchema = new mongoose.Schema({
   },
   quantity: { type: Number, required: true, min: 1 },
   price: { type: Number, required: true },
+  priceDiscount: { type: Number, required: true },
+  discountAmount: { type: Number, required: true },
 });
 
 const orderSchema = new mongoose.Schema(
@@ -21,6 +34,14 @@ const orderSchema = new mongoose.Schema(
     },
     items: [orderItemSchema],
     total: { type: Number, required: true },
+    totalWithDiscount: { type: Number, required: true },
+    totalDiscountAmount: { type: Number, required: true },
+    status: {
+      type: String,
+      enum: Object.values(OrderStatus),
+      required: true,
+      default: OrderStatus.PENDIENTE,
+    },
   },
   { timestamps: true }
 );

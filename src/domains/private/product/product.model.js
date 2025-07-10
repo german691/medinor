@@ -14,11 +14,10 @@ const productSchema = new mongoose.Schema(
     lab: { type: mongoose.Schema.Types.ObjectId, ref: "Lab" },
     category: { type: mongoose.Schema.Types.ObjectId, ref: "Category" },
     imageUrl: { type: String },
+    discount: { type: Number },
   },
   {
     timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
   }
 );
 
@@ -26,18 +25,67 @@ productSchema.pre("save", function (next) {
   if (!this.imageUrl) {
     this.imageUrl = this.code;
   }
-  next();
-});
 
-productSchema.virtual("discount").get(function () {
   if (
     this.medinor_price != null &&
     this.public_price != null &&
     this.public_price !== 0
   ) {
-    return parseFloat((this.medinor_price / this.public_price - 1).toFixed(4));
+    this.discount = parseFloat(
+      (this.medinor_price / this.public_price - 1).toFixed(4)
+    );
+  } else {
+    this.discount = 0;
   }
-  return 0;
+
+  next();
+});
+
+productSchema.pre("findOneAndUpdate", async function (next) {
+  const update = this.getUpdate();
+  if (!update) return next();
+
+  let current = {};
+  if (!update.medinor_price || !update.public_price) {
+    current = await this.model.findOne(this.getQuery()).lean();
+  }
+
+  const medinor_price = update.medinor_price ?? current.medinor_price;
+  const public_price = update.public_price ?? current.public_price;
+
+  if (medinor_price != null && public_price != null && public_price !== 0) {
+    update.discount = parseFloat((medinor_price / public_price - 1).toFixed(4));
+  } else {
+    update.discount = 0;
+  }
+
+  if (!update.imageUrl && (update.code || current.code)) {
+    update.imageUrl = update.code ?? current.code;
+  }
+
+  next();
+});
+
+productSchema.pre("updateOne", async function (next) {
+  const update = this.getUpdate();
+  if (!update) return next();
+
+  const current = await this.model.findOne(this.getQuery()).lean();
+
+  const medinor_price = update.medinor_price ?? current.medinor_price;
+  const public_price = update.public_price ?? current.public_price;
+
+  if (medinor_price != null && public_price != null && public_price !== 0) {
+    update.discount = parseFloat((medinor_price / public_price - 1).toFixed(4));
+  } else {
+    update.discount = 0;
+  }
+
+  if (!update.imageUrl && (update.code || current.code)) {
+    update.imageUrl = update.code ?? current.code;
+  }
+
+  next();
 });
 
 export const Product = mongoose.model("Product", productSchema);

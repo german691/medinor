@@ -255,8 +255,6 @@ export const getClients = asyncHandler(async (req, res) => {
       totalItems: total,
       items: clients,
     });
-
-    console.log({ page: pageNumber, totalPages, totalItems: total });
   } catch (error) {
     console.error("Error al obtener clientes:", error);
     handleError("Error interno del servidor al obtener clientes.", 500);
