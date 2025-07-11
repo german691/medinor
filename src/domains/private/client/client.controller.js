@@ -8,6 +8,8 @@ import {
 } from "../../../util/clientMigrationCleaner.js";
 import { clientObjectSchema } from "./client.validation.js";
 import handleError from "../../../util/handleError.js";
+import { verifyHashedData } from "../../../util/hashData.js";
+import { createActionToken, PURPOSES } from "../../../util/createToken.js";
 
 /**
  * @desc    Consulta a la base de datos, devuelve los usuarios ya existentes o conflictivos.
@@ -490,4 +492,51 @@ export const bulkUpdateClients = asyncHandler(async (req, res) => {
       updatedItems: updatedClients,
     });
   }
+});
+
+// AUTHORIZATION
+
+export const loginClient = asyncHandler(async (req, res) => {
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ message: "Credenciales no obtenidas" });
+  }
+
+  const client = await Client.findOne({ username });
+
+  if (!client) {
+    return res.status(401).json({ message: "Credenciales incorrectas" });
+  }
+
+  if (!client.active) {
+    return res.status(403).json({ message: "Usuario desactivado" });
+  }
+
+  const isMatch = await verifyHashedData(password, client.password);
+  if (!isMatch) {
+    return res.status(401).json({ message: "Credenciales incorrectas" });
+  }
+
+  if (client.must_change_password) {
+    const token = createActionToken({
+      clientId: client._id,
+      purpose: PURPOSES.resetPwd,
+    });
+
+    return res.status(200).json({
+      message: "Cambio de contraseña requerido.",
+      action_required: "restore-password",
+      redirect_to: "change_password",
+      token: token,
+    });
+  }
+
+  const token = await createToken({
+    clientId: client._id,
+    username: client.username,
+    role: "client",
+  });
+
+  return res.status(200).json({ token, role: "client" });
 });

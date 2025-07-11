@@ -10,8 +10,6 @@ import {
   updateAdminInfo,
 } from "./admin.controller.js";
 import { loginSchema, registerSchema } from "./admin.schema.js";
-import { verifyHashedData } from "../../../util/hashData.js";
-import handleError from "../../../util/handleError.js";
 
 export const handleAdminRegister = asyncHandler(async (req, res) => {
   const key = req.headers["x-admin-key"];

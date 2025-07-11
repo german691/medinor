@@ -6,6 +6,7 @@ import {
   createNewClient,
   getClientById,
   getClients,
+  loginClient,
   updateClientById,
 } from "./client.controller.js";
 
@@ -26,5 +27,12 @@ router.put(
 );
 router.post("/analyze", analyzeClients);
 router.post("/make-migration", confirmClientMigration);
+
+/** AUTENTICACIÓN **/
+// login
+router.post("/login", loginClient);
+
+// reset password
+router.post("/reset-password", resetPassword);
 
 export default router;
