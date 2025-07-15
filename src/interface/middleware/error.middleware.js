@@ -1,20 +1,19 @@
 export const errorMiddleware = (error, req, res, next) => {
-  const statusCode = error.status || 500;
+  console.error(error);
 
   if (error.isJoi) {
-    console.log(error);
-
     return res.status(400).json({
       status: 400,
-      message: "Error en la validación de los datos de entrada.",
+      message: "Error en la validación de datos.",
       details: error.details.map((detail) => detail.message.replace(/"/g, "'")),
     });
   }
-  console.log(error);
+
+  const statusCode = error.status || error.statusCode || 500;
 
   return res.status(statusCode).json({
     status: statusCode,
-    message: error.message || "Internal server error",
+    message: error.message || "Error interno del servidor",
   });
 };
 

@@ -1,9 +1,10 @@
 import { Admin } from "../domains/private/admin/admin.model.js";
+import { Roles } from "../domains/roles.js";
 import { hashData } from "./hashData.js";
 
 export const initSuperadmin = async () => {
   try {
-    const superadminExists = await Admin.findOne({ userType: "superadmin" });
+    const superadminExists = await Admin.findOne({ role: Roles.SUPERADMIN });
     if (superadminExists) {
       return;
     } else {
@@ -12,16 +13,16 @@ export const initSuperadmin = async () => {
 
     const { DEFAULT_SUPERADMIN_USERNAME, DEFAULT_SUPERADMIN_PASSWORD } =
       process.env;
-    const username = DEFAULT_SUPERADMIN_USERNAME || "superadmin";
-    const password = DEFAULT_SUPERADMIN_PASSWORD || "superadmin";
+    const username = DEFAULT_SUPERADMIN_USERNAME || Roles.SUPERADMIN;
+    const password = DEFAULT_SUPERADMIN_PASSWORD || Roles.SUPERADMIN;
 
     const hashedPassword = await hashData(password);
 
     const superadminObj = {
       username,
       password: hashedPassword,
-      fullName: "superadmin",
-      userType: "superadmin",
+      fullName: Roles.SUPERADMIN,
+      role: Roles.SUPERADMIN,
     };
 
     await Admin.create(superadminObj);

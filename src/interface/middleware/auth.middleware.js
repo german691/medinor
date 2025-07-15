@@ -1,29 +1,61 @@
 import jsonwebtoken from "jsonwebtoken";
+const { TokenExpiredError } = jsonwebtoken;
+
+export const Purposes = {
+  session: "session",
+  resetPassword: "reset-password",
+};
 
 const { TOKEN_KEY } = process.env;
 
-const auth = (permissions) => {
+/**
+ * Middleware de autenticación con control de propósito y permisos por rol.
+ *
+ * @param {string[]} permissions - Lista de roles permitidos (opcional)
+ * @param {string} purpose - Propósito esperado del token (opcional)
+ * @returns {function} Middleware de Express
+ */
+const auth = (permissions, purpose) => {
   return (req, res, next) => {
-    const token =
-      req.headers["x-access-token"] ||
-      req.headers["x-admin-token"] ||
-      req.headers["authorization"];
+    const authHeader = req.headers["authorization"];
 
-    if (!token) {
-      return res.status(403).send("An authentication token is required");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res
+        .status(401)
+        .json({ message: "Token de autenticación (Bearer) requerido." });
     }
 
-    try {
-      const decodedToken = jsonwebtoken.verify(token, TOKEN_KEY);
-      req.currentUser = decodedToken;
+    const token = authHeader.split(" ")[1];
 
-      if (permissions && !permissions.includes(req.currentUser.userType)) {
-        return res.status(401).send("Unauthorized access");
+    try {
+      const decoded = jsonwebtoken.verify(token, TOKEN_KEY);
+      const { role, purpose: tokenPurpose } = decoded;
+
+      req.user = decoded;
+
+      const allowedRoles = Array.isArray(permissions)
+        ? permissions
+        : [permissions];
+
+      if (permissions && !allowedRoles.includes(role)) {
+        return res
+          .status(403)
+          .json({ message: "Acceso no autorizado para este rol." });
+      }
+
+      if (purpose && tokenPurpose !== purpose) {
+        return res
+          .status(403)
+          .json({ message: "Acción no permitida por el propósito del token." });
       }
 
       return next();
     } catch (error) {
-      return res.status(401).send("Invalid token provided");
+      if (error instanceof TokenExpiredError) {
+        return res.status(401).json({ message: "El token ha expirado." });
+      }
+
+      return res.status(401).json({ message: "Token inválido." });
     }
   };
 };

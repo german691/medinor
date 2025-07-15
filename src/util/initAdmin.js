@@ -1,8 +1,10 @@
 import { Admin } from "../domains/private/admin/admin.model.js";
+import { Roles } from "../domains/roles.js";
+import { hashData } from "./hashData.js";
 
 export const initAdmin = async () => {
   try {
-    const adminExists = await Admin.findOne({ userType: "admin" });
+    const adminExists = await Admin.findOne({ role: Roles.ADMIN });
     if (adminExists) {
       return;
     } else {
@@ -10,16 +12,16 @@ export const initAdmin = async () => {
     }
 
     const { DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD } = process.env;
-    const username = DEFAULT_ADMIN_USERNAME || "admin";
-    const password = DEFAULT_ADMIN_PASSWORD || "admin";
+    const username = DEFAULT_ADMIN_USERNAME || Roles.ADMIN;
+    const password = DEFAULT_ADMIN_PASSWORD || Roles.ADMIN;
 
     const hashedPassword = await hashData(password);
 
     const adminObj = {
       username,
       password: hashedPassword,
-      fullName: "admin",
-      userType: "admin",
+      fullName: Roles.ADMIN,
+      role: Roles.ADMIN,
     };
 
     await Admin.create(adminObj);

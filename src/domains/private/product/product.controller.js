@@ -2,29 +2,38 @@ import { Lab } from "../lab/lab.model.js";
 import { Product } from "./product.model.js";
 import mongoose from "mongoose";
 import asyncHandler from "express-async-handler";
-import handleError from "../../../util/handleError.js";
 import { Category } from "../category/category.model.js";
 
-const normalizeLabName = (name) => {
-  return name ? String(name).trim().toUpperCase() : null;
-};
-
 /**
- * @desc    Endpoint para analizar los datos de productos cargados.
- * - Verifica y crea laboratorios y categorías si no existen.
- * - Clasifica los productos en nuevos, existentes, con conflictos o inválidos.
- * - Devuelve un resumen para que el frontend lo revise.
- * @route   POST /api/products/analyze
- * @access  Private
+ * Analiza un listado de productos para prepararlos para migración.
+ *
+ * - Crea laboratorios y categorías si no existen, o usa los existentes.
+ * - Valida datos básicos de cada producto (código, descripción, laboratorio, categoría).
+ * - Detecta productos **nuevos** para añadir, productos **existentes** sin cambios,
+ * y productos con **conflictos** (mismo código con datos diferentes) que requieren revisión.
+ * - Filtra productos inválidos y genera un resumen con estadísticas de todo el proceso.
+ *
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Array<Object>} req.body.products - Array de objetos de producto a analizar.
+ * Cada objeto debe contener campos como `code`, `lab`, `category`, `desc`, etc.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {200} - Retorna un resumen completo del análisis de productos, incluyendo:
+ * - `message`: Un mensaje descriptivo del resultado del análisis.
+ * - `summary`: Estadísticas de `totalReceived`, `totalValid`, `totalInvalid`, `totalNew`,
+ * `totalCurrent`, `totalConflicts`, `totalFilteredOut`.
+ * - `data`: Arrays de `newProducts`, `currentProducts`, `conflictingProducts`, `invalidRows`,
+ * y `productsReadyForMigration` (para la siguiente fase de migración).
+ * @returns {400} - Retorna un error si el cuerpo de la solicitud no contiene un array válido o vacío de productos.
  */
 export const analyzeProducts = asyncHandler(async (req, res) => {
   const { products: productsData } = req.body;
 
   if (!Array.isArray(productsData) || productsData.length === 0) {
-    handleError(
-      "No se encontraron datos de productos en la solicitud o el formato es incorrecto (debe ser un array en 'products').",
-      400
-    );
+    res
+      .status(400)
+      .send(
+        "No se encontraron datos de productos en la solicitud o el formato es incorrecto (debe ser un array en 'products')."
+      );
   }
 
   const normalizeName = (name) =>
@@ -254,17 +263,29 @@ export const analyzeProducts = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Endpoint para confirmar y ejecutar la migración de productos.
- * - Valida que los IDs de laboratorio y categoría sean correctos.
- * - Crea los nuevos productos en la base de datos.
- * @route   POST /api/products/make-migration
- * @access  Private
+ * Confirma y ejecuta la migración de productos previamente analizados.
+ *
+ * - Requiere un listado de productos que ya han sido validados y contienen IDs válidos
+ * para laboratorio y categoría (generalmente provienen de la fase `analyzeProducts`).
+ * - Intenta insertar cada producto en la base de datos.
+ * - Registra y reporta los errores de inserción individuales.
+ *
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Array<Object>} req.body.productsToMigrate - Array de objetos de producto
+ * listos para ser insertados en la base de datos.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {201} - Retorna un mensaje de éxito con el **conteo de productos creados**
+ * y una lista de **errores de migración** si algunas inserciones fallaron.
+ * @returns {400} - Retorna un error si el cuerpo de la solicitud no contiene un array
+ * válido o vacío de productos para migrar.
+ * @returns {500} - Retorna un error interno del servidor si ocurre un fallo inesperado
+ * durante el proceso de migración.
  */
 export const confirmProductMigration = asyncHandler(async (req, res) => {
   const { productsToMigrate } = req.body;
 
   if (!Array.isArray(productsToMigrate) || productsToMigrate.length === 0) {
-    handleError("No se encontraron productos válidos para migrar.", 400);
+    res.status(400).send("No se encontraron productos válidos para migrar.");
   }
 
   let createdCount = 0;
@@ -319,16 +340,33 @@ export const confirmProductMigration = asyncHandler(async (req, res) => {
     });
   } catch (error) {
     console.error("Error general durante la migración de productos:", error);
-    handleError("Error interno del servidor al ejecutar la migración.", 500, {
+
+    res.status(500).json({
+      message: "Error interno del servidor al ejecutar la migración.",
       migrationErrors: migrationErrors,
     });
   }
 });
 
 /**
- * @desc Obtener productos paginados con posibilidad de búsqueda.
- * @route POST /api/products
- * @access Public
+ * Obtiene productos paginados, permitiendo filtrado por campos, búsqueda de texto
+ * en código, notas, descripción, y por nombre de laboratorio o categoría.
+ *
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} req.body - Cuerpo de la solicitud con parámetros de consulta.
+ * @param {number} [req.body.page=1] - Número de página para la paginación.
+ * @param {number} [req.body.limit=25] - Cantidad de productos por página.
+ * @param {Object} [req.body.filters={}] - Objeto con criterios de filtrado adicionales.
+ * @param {Object} [req.body.sort={}] - Criterios de ordenamiento (ej. `{ key: "price", direction: -1 }`).
+ * @param {string} [req.body.search=""] - Texto para buscar en `code`, `notes`, `desc`, `extra_desc`,
+ * o en los nombres de `lab` y `category`.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {200} - Retorna un objeto con la lista de productos, información de paginación y metadatos:
+ * - `page`: Número de página actual.
+ * - `totalPages`: Total de páginas disponibles.
+ * - `totalItems`: Total de productos que coinciden con los filtros.
+ * - `items`: Array de objetos de producto formateados, incluyendo `id`, nombres de `lab` y `category`, y `discount`.
+ * @returns {500} - Retorna un error interno del servidor si ocurre un problema durante la consulta a la base de datos.
  */
 export const getProducts = asyncHandler(async (req, res) => {
   console.log(req.body);
@@ -423,24 +461,33 @@ export const getProducts = asyncHandler(async (req, res) => {
     });
   } catch (error) {
     console.error("Error al obtener productos:", error);
-    handleError("Error interno del servidor al obtener productos.", 500);
+    res.status(500).send("Error interno del servidor al obtener productos.");
   }
 });
 
 /**
- * @desc Endpoint para obtener un solo producto por su ID.
- * @route GET /api/products/:id
- * @access Public
+ * Devuelve un producto específico por su ID.
+ *
+ * - Valida que el formato del ID sea un ObjectId válido de Mongoose.
+ * - Incluye la información del laboratorio populada.
+ *
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {string} req.params.id - ID del producto a buscar.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {200} - Retorna un objeto con el producto encontrado y formateado.
+ * @returns {400} - Retorna un error si el ID del producto es inválido.
+ * @returns {404} - Retorna un error si el producto no es encontrado.
+ * @returns {500} - Retorna un error interno del servidor si ocurre un fallo durante la consulta.
  */
 export const getProductById = asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      handleError("ID de producto inválido.", 400);
+      res.status(400).send("ID de producto inválido.");
     }
     const product = await Product.findById(id).populate("lab").lean();
     if (!product) {
-      handleError("Producto no encontrado.", 400);
+      res.status(400).send("Producto no encontrado.");
     }
     const formattedProduct = {
       ...product,
@@ -450,14 +497,36 @@ export const getProductById = asyncHandler(async (req, res) => {
     res.status(200).json({ product: formattedProduct });
   } catch (error) {
     console.error(`Error al obtener producto con ID ${req.params.id}:`, error);
-    handleError("Error interno del servidor al obtener productos.", 500);
+    res.status(400).send("Error interno del servidor al obtener productos.");
   }
 });
 
 /**
- * @desc Endpoint para crear un nuevo producto individual.
- * @route POST /api/products
- * @access Private
+ * Crea un nuevo producto individual en la base de datos.
+ *
+ * - Requiere un código, descripción, laboratorio y categoría válidos.
+ * - Valida la existencia de los nombres de laboratorio y categoría, convirtiéndolos a sus IDs.
+ * - Previene la creación de duplicados por el campo `code`.
+ *
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Object} req.body - Cuerpo de la solicitud con los datos del nuevo producto.
+ * @param {string} req.body.code - Código único del producto.
+ * @param {string} [req.body.notes] - Notas adicionales del producto.
+ * @param {string} req.body.lab - Nombre del laboratorio al que pertenece el producto.
+ * @param {string} req.body.category - Nombre de la categoría del producto.
+ * @param {string} req.body.desc - Descripción del producto.
+ * @param {string} [req.body.extra_desc] - Descripción extra del producto.
+ * @param {number} [req.body.iva] - Valor del IVA.
+ * @param {number} [req.body.medinor_price] - Precio Medinor.
+ * @param {number} [req.body.public_price] - Precio Público.
+ * @param {number} [req.body.price] - Precio general.
+ * @param {string} [req.body.imageUrl] - URL de la imagen del producto.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {201} - Retorna un mensaje de éxito y el objeto del producto creado, formateado.
+ * @returns {400} - Retorna un error si faltan datos obligatorios (`code`, `desc`, `lab`, `category`),
+ * o si el laboratorio o la categoría proporcionados no son válidos/no existen.
+ * @returns {409} - Retorna un error si ya existe un producto con el mismo `code`.
+ * @returns {500} - Retorna un error interno del servidor si falla la creación del producto.
  */
 export const createProduct = asyncHandler(async (req, res) => {
   try {
@@ -477,33 +546,34 @@ export const createProduct = asyncHandler(async (req, res) => {
     console.log(req.body);
 
     if (!code || !desc || !lab || !category) {
-      handleError(
-        "Código, descripción, laboratorio y categoría son campos requeridos.",
-        400
-      );
+      res
+        .status(400)
+        .send(
+          "Código, descripción, laboratorio y categoría son campos requeridos."
+        );
     }
 
     const labIsValid = await Lab.findOne({ name: lab });
     if (!labIsValid) {
-      handleError(
-        `No se proporcionó un nombre de laboratorio válido: '${lab}'.`,
-        400
-      );
+      res
+        .status(400)
+        .send(`No se proporcionó un nombre de laboratorio válido: '${lab}'.`);
     }
     const labId = labIsValid._id;
 
     const categoryIsValid = await Category.findOne({ name: category });
     if (!categoryIsValid) {
-      handleError(
-        `No se proporcionó un nombre de categoría válido: '${category}'.`,
-        400
-      );
+      res
+        .status(400)
+        .send(
+          `No se proporcionó un nombre de categoría válido: '${category}'.`
+        );
     }
     const categoryId = categoryIsValid._id;
 
     const existingProduct = await Product.findOne({ code: code });
     if (existingProduct) {
-      handleError(`Ya existe un producto con el código '${code}'.`, 409);
+      res.status(409).send(`Ya existe un producto con el código '${code}'.`);
     }
 
     const newProduct = new Product({
@@ -544,14 +614,29 @@ export const createProduct = asyncHandler(async (req, res) => {
     });
   } catch (error) {
     console.error("Error al crear producto:", error);
-    handleError("Error interno del servidor al crear producto.", 500);
+    res.status(500).send("Error interno del servidor al crear producto.");
   }
 });
 
 /**
- * @desc Endpoint para actualizar un producto existente por su ID.
- * @route PUT /api/products
- * @access Private
+ * Actualiza un producto existente por su ID.
+ *
+ * - Valida que el ID del producto y el ID del laboratorio (si se actualiza) sean válidos.
+ * - Verifica la unicidad del código del producto si se intenta cambiar,
+ * asegurándose de que no colisione con otro producto existente.
+ * - Aplica las actualizaciones proporcionadas y retorna el producto modificado.
+ *
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {string} req.params.id - ID del producto a actualizar.
+ * @param {Object} req.body - Cuerpo de la solicitud con los campos a actualizar.
+ * @param {string} [req.body.code] - Nuevo código del producto (debe ser único).
+ * @param {string} [req.body.lab] - Nuevo ID (ObjectId) del laboratorio.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {200} - Retorna un mensaje de éxito y el objeto del producto actualizado.
+ * @returns {400} - Retorna un error si el ID del producto o el ID del laboratorio son inválidos.
+ * @returns {404} - Retorna un error si el producto no es encontrado para actualizar.
+ * @returns {409} - Retorna un error si el `code` proporcionado ya está en uso por otro producto.
+ * @returns {500} - Retorna un error interno del servidor si ocurre un fallo durante la actualización.
  */
 export const updateProduct = asyncHandler(async (req, res) => {
   try {
@@ -559,19 +644,18 @@ export const updateProduct = asyncHandler(async (req, res) => {
     const { code, lab } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      handleError("ID de producto inválido.", 400);
+      res.status(400).send("ID de producto inválido.");
     }
     if (!mongoose.Types.ObjectId.isValid(lab)) {
-      handleError("ID de laboratorio proporcionado no es válido.", 400);
+      res.status(400).send("ID de laboratorio proporcionado no es válido.");
     }
 
     if (code) {
       const productWithSameCode = await Product.findOne({ code: code });
       if (productWithSameCode && productWithSameCode._id.toString() !== id) {
-        handleError(
-          `El código '${code}' ya está en uso por otro producto.`,
-          409
-        );
+        res
+          .status(409)
+          .send(`El código '${code}' ya está en uso por otro producto.`);
       }
     }
 
@@ -583,7 +667,7 @@ export const updateProduct = asyncHandler(async (req, res) => {
       .lean();
 
     if (!updatedProduct) {
-      handleError("Producto no encontrado.", 404);
+      res.status(404).send("Producto no encontrado.");
     }
 
     const formattedUpdatedProduct = {
@@ -608,16 +692,35 @@ export const updateProduct = asyncHandler(async (req, res) => {
       error
     );
     if (error.code === 11000) {
-      handleError("Ya existe un producto con el código proporcionado.", 409);
+      res
+        .status(409)
+        .send("Ya existe un producto con el código proporcionado.");
     }
-    handleError("Error interno del servidor al actualizar el producto.", 500);
+    res
+      .status(500)
+      .send("Error interno del servidor al actualizar el producto.");
   }
 });
 
 /**
- * @desc    Actualiza múltiples productos.
- * @route   PUT /api/products/bulk-update
- * @access  Private
+ * Actualiza múltiples productos a la vez mediante un array de datos de actualización.
+ *
+ * - Valida la presencia de `_id` para cada producto a actualizar.
+ * - Si se actualizan `lab` o `category` por nombre, los busca y convierte a sus IDs.
+ * - Detecta y reporta conflictos de `code` duplicados durante la actualización.
+ * - Realiza actualizaciones parciales (solo los campos provistos).
+ * - Retorna un resumen de productos actualizados exitosamente y los errores.
+ *
+ * @param {Object} req - Objeto de solicitud de Express.
+ * @param {Array<Object>} req.body - Array de objetos, donde cada objeto debe contener
+ * el `_id` del producto y los campos a actualizar.
+ * @param {Object} res - Objeto de respuesta de Express.
+ * @returns {200} - Retorna un mensaje de éxito, el conteo de productos actualizados y
+ * la lista de ítems actualizados si **todas** las operaciones fueron exitosas.
+ * @returns {207} - Retorna un mensaje de éxito parcial con el conteo de actualizaciones,
+ * una lista de **errores** detallados para los productos que fallaron, y los ítems
+ * que sí se actualizaron.
+ * @returns {400} - Retorna un error si el cuerpo de la solicitud no es un array válido o está vacío.
  */
 export const bulkUpdateProducts = asyncHandler(async (req, res) => {
   const productsToUpdate = req.body;
@@ -625,7 +728,7 @@ export const bulkUpdateProducts = asyncHandler(async (req, res) => {
   console.log("product update control (datos recibidos):", productsToUpdate);
 
   if (!Array.isArray(productsToUpdate) || productsToUpdate.length === 0) {
-    handleError("Se espera un array de productos para actualizar.", 400);
+    res.status(400).send("Se espera un array de productos para actualizar.");
     return;
   }
 
@@ -633,7 +736,7 @@ export const bulkUpdateProducts = asyncHandler(async (req, res) => {
   const errors = [];
 
   for (const productData of productsToUpdate) {
-    const { _id, code, lab, category } = productData; // Destructure category
+    const { _id, code, lab, category } = productData;
 
     if (!_id) {
       errors.push({
@@ -686,7 +789,6 @@ export const bulkUpdateProducts = asyncHandler(async (req, res) => {
           continue;
         }
 
-        // New: Handle 'category' field similar to 'lab'
         if (key === "category") {
           if (
             typeof productData.category === "string" &&

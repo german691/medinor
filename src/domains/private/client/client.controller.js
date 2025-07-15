@@ -7,9 +7,9 @@ import {
   cleanRazonSoci,
 } from "../../../util/clientMigrationCleaner.js";
 import { clientObjectSchema } from "./client.validation.js";
-import handleError from "../../../util/handleError.js";
-import { verifyHashedData } from "../../../util/hashData.js";
-import { createActionToken, PURPOSES } from "../../../util/createToken.js";
+import { createToken } from "../../../util/createToken.js";
+import { Purposes } from "../../../interface/middleware/auth.middleware.js";
+import { Roles } from "../../roles.js";
 
 /**
  * @desc    Consulta a la base de datos, devuelve los usuarios ya existentes o conflictivos.
@@ -17,9 +17,11 @@ import { createActionToken, PURPOSES } from "../../../util/createToken.js";
  * @access  Private
  */
 export const analyzeClients = asyncHandler(async (req, res) => {
+  console.log("analyzed");
+
   const { clients: rawClients } = req.body;
   if (!rawClients || rawClients.length === 0) {
-    handleError("El archivo no contiene clientes.", 400);
+    res.status(400).send("El archivo no contiene clientes.");
   }
 
   const cleanedClients = rawClients.map((client) => ({
@@ -54,10 +56,9 @@ export const analyzeClients = asyncHandler(async (req, res) => {
   }
 
   if (validClients.length === 0 && invalidRows.length > 0) {
-    handleError(
-      "Ningún cliente en el archivo pasó las validaciones requeridas.",
-      400
-    );
+    res
+      .status(404)
+      .send("Ningún cliente en el archivo pasó las validaciones requeridas.");
   }
 
   const cuitsInFile = validClients.map((c) => c.IDENTIFTRI);
@@ -142,19 +143,29 @@ export const analyzeClients = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const confirmClientMigration = asyncHandler(async (req, res) => {
+  console.log("confirmed");
   const { newClients } = req.body.data;
 
   if (!newClients || newClients.length === 0) {
-    return handleError("No se recibieron clientes válidos para crear.", 400);
+    return res
+      .status(400)
+      .send("No se recibieron clientes válidos para crear.");
   }
 
   const clientsToCreate = newClients.map((client) => {
+    console.log({
+      cod_client: client.COD_CLIENT,
+      razon_soci: client.RAZON_SOCI,
+      identiftri: client.IDENTIFTRI,
+      username: String(client.IDENTIFTRI),
+    });
+
     const hashedPassword = bcrypt.hashSync(String(client.IDENTIFTRI), 10);
     return {
       cod_client: client.COD_CLIENT,
       razon_soci: client.RAZON_SOCI,
       identiftri: client.IDENTIFTRI,
-      username: String(client.IDENTIFTRI),
+      username: String(client.IDENTIFTRI).trim(),
       password: hashedPassword,
     };
   });
@@ -259,7 +270,7 @@ export const getClients = asyncHandler(async (req, res) => {
     });
   } catch (error) {
     console.error("Error al obtener clientes:", error);
-    handleError("Error interno del servidor al obtener clientes.", 500);
+    res.status(500).send("Error interno del servidor al obtener clientes");
   }
 });
 
@@ -282,7 +293,7 @@ export const getAllClients = asyncHandler(async (req, res) => {
 export const getClientById = asyncHandler(async (req, res) => {
   const client = await Client.findById(req.params.id);
   if (!client) {
-    handleError("Cliente no encontrado.", 404);
+    res.status(404).send("Cliente no encontrado.");
   }
   res.status(200).json({ item: client });
 });
@@ -306,16 +317,17 @@ export const createNewClient = asyncHandler(async (req, res) => {
 
   if (duplicate) {
     if (duplicate.cod_client === cod_client) {
-      handleError(`Ya existe un cliente con el código '${cod_client}'.`, 409);
+      res
+        .status(409)
+        .send(`Ya existe un cliente con el código '${cod_client}'.`);
     }
     if (duplicate.identiftri === identiftri) {
-      handleError(`Ya existe un cliente con el CUIT '${identiftri}'.`, 409);
+      res.status(409).send(`Ya existe un cliente con el CUIT '${identiftri}'.`);
     }
     if (duplicate.username === finalUsername) {
-      handleError(
-        `El nombre de usuario '${finalUsername}' ya está en uso.`,
-        409
-      );
+      res
+        .status(409)
+        .send(`El nombre de usuario '${finalUsername}' ya está en uso.`);
     }
   }
 
@@ -348,16 +360,19 @@ export const updateClientById = asyncHandler(async (req, res) => {
 
   if (duplicate) {
     if (duplicate.cod_client && duplicate.cod_client === cod_client) {
-      handleError(
-        `El código '${cod_client}' ya pertenece a otro cliente.`,
-        409
-      );
+      res
+        .status(409)
+        .send(`El código '${cod_client}' ya pertenece a otro cliente.`, 409);
     }
     if (duplicate.identiftri && duplicate.identiftri === identiftri) {
-      handleError(`El CUIT '${identiftri}' ya pertenece a otro cliente.`, 409);
+      res
+        .status(409)
+        .send(`El CUIT '${identiftri}' ya pertenece a otro cliente.`);
     }
     if (duplicate.username && duplicate.username === username) {
-      handleError(`El nombre de usuario '${username}' ya está en uso.`, 409);
+      res
+        .status(409)
+        .send(`El nombre de usuario '${username}' ya está en uso.`);
     }
   }
 
@@ -374,7 +389,7 @@ export const updateClientById = asyncHandler(async (req, res) => {
   });
 
   if (!updatedClient) {
-    handleError("Cliente no encontrado para actualizar.", 404);
+    res.status(404).send("Cliente no encontrado para actualizar.");
   }
 
   res.status(200).json({ item: updatedClient });
@@ -389,21 +404,18 @@ export const bulkUpdateClients = asyncHandler(async (req, res) => {
   const clientsToUpdate = req.body;
 
   if (!Array.isArray(clientsToUpdate) || clientsToUpdate.length === 0) {
-    handleError("Se espera un array de clientes para actualizar.", 400);
+    res.status(400).send("Se espera un array de clientes para actualizar.");
   }
 
   const updatedClients = [];
   const errors = [];
 
   for (const clientData of clientsToUpdate) {
-    const {
-      _id,
-      cod_client,
-      identiftri,
-      username,
-      password,
-      ...restOfClientData
-    } = clientData;
+    const { _id, cod_client, identiftri, username, ...restOfClientData } =
+      clientData;
+
+    // falta la lógica de login
+    // const { newPassword } = req.body
 
     if (!_id) {
       errors.push({
@@ -440,11 +452,12 @@ export const bulkUpdateClients = asyncHandler(async (req, res) => {
       if (cod_client !== undefined) updateData.cod_client = cod_client;
       if (identiftri !== undefined) updateData.identiftri = identiftri;
       if (username !== undefined) updateData.username = username;
-      if (password) {
-        updateData.password = await bcrypt.hash(password, 10);
-      } else if (password === null) {
-        updateData.password = null;
-      }
+      // no usar esta lógica
+      // if (newPassword) {
+      //   updateData.newPassword = bcrypt.hashSync(newPassword, 10);
+      // } else if (newPassword === null) {
+      //   updateData.newPassword = null;
+      // }
 
       const updatedClient = await Client.findByIdAndUpdate(
         _id,
@@ -494,8 +507,13 @@ export const bulkUpdateClients = asyncHandler(async (req, res) => {
   }
 });
 
-// AUTHORIZATION
-
+/**
+ * AUTENTICACIÓN
+ *
+ * @desc    Actualizar múltiples clientes.
+ * @route   POST /api/clients/login
+ * @access  Public
+ */
 export const loginClient = asyncHandler(async (req, res) => {
   const { username, password } = req.body;
 
@@ -513,30 +531,71 @@ export const loginClient = asyncHandler(async (req, res) => {
     return res.status(403).json({ message: "Usuario desactivado" });
   }
 
-  const isMatch = await verifyHashedData(password, client.password);
+  console.log("cliente", client);
+
+  const isMatch = bcrypt.compareSync(password, client.password);
   if (!isMatch) {
-    return res.status(401).json({ message: "Credenciales incorrectas" });
+    return res.status(401).json({
+      message: "Credenciales incorrectas",
+      password: `${password}`,
+      hashed: `${client.password}`,
+    });
   }
 
   if (client.must_change_password) {
-    const token = createActionToken({
-      clientId: client._id,
-      purpose: PURPOSES.resetPwd,
+    const token = await createToken({
+      payload: {
+        id: client._id,
+        username: client.username,
+        role: Roles.CLIENT,
+        purpose: Purposes.resetPassword,
+      },
+      expiresIn: "15m",
     });
 
     return res.status(200).json({
       message: "Cambio de contraseña requerido.",
-      action_required: "restore-password",
-      redirect_to: "change_password",
+      action_required: "reset-password",
+      redirect_to: "reset_password",
       token: token,
     });
   }
 
   const token = await createToken({
-    clientId: client._id,
-    username: client.username,
-    role: "client",
+    payload: {
+      id: client._id,
+      username: client.username,
+      role: Roles.CLIENT,
+    },
   });
 
-  return res.status(200).json({ token, role: "client" });
+  return res.status(200).json({ token, role: Roles.CLIENT });
+});
+
+export const resetPassword = asyncHandler(async (req, res) => {
+  const { newPassword } = req.body;
+  const { id } = req.user;
+
+  const hashedPassword = bcrypt.hashSync(newPassword, 10);
+
+  await Client.findByIdAndUpdate(id, {
+    password: hashedPassword,
+    must_change_password: false,
+  });
+
+  return res
+    .status(200)
+    .json({ message: "Contraseña de usuario reseteada correctamente" });
+});
+
+export const getSelfClientAccountInfo = asyncHandler(async (req, res) => {
+  const { client } = req;
+
+  res.status(200).json({
+    data: {
+      id: client._id,
+      username: client.username,
+      razon_soci: client.razon_soci.trim(),
+    },
+  });
 });

@@ -2,11 +2,19 @@ import jsonwebtoken from "jsonwebtoken";
 
 const { TOKEN_KEY, TOKEN_EXPIRY } = process.env;
 
-const createToken = async (
+/**
+ * Crea un token JWT con los datos necesarios para el middleware de autenticación.
+ *
+ * @param {object} payload
+ * @param {string} [key]
+ * @param {string} [expiresIn]
+ * @returns {Promise<string>} <- token
+ */
+export const createToken = async ({
   payload,
   key = TOKEN_KEY,
-  expiresIn = TOKEN_EXPIRY || "72h"
-) => {
+  expiresIn = TOKEN_EXPIRY || "72h",
+}) => {
   try {
     const token = jsonwebtoken.sign(payload, key, {
       expiresIn,
@@ -16,31 +24,3 @@ const createToken = async (
     throw error;
   }
 };
-
-export const PURPOSES = {
-  resetPwd: "reset-password",
-};
-
-/**
- * Genera un token jwt multipropósito
- * @param {string} clientId - id de cliente
- * @param {string} purpose - razón del token, ej. reset password
- * @param {string} expiresIn - expiración del token
- * @returns {string} - token jwt firmado
- */
-export const createActionToken = ({
-  clientId,
-  purpose = PURPOSES.resetPwd,
-  expiresIn = "1h",
-}) => {
-  const payload = {
-    sub: clientId,
-    purpose: purpose,
-  };
-
-  const secretKey = process.env.TOKEN_KEY;
-
-  return jwt.sign(payload, secretKey, { expiresIn });
-};
-
-export default createToken;

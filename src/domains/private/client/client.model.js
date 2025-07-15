@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { Roles } from "../../roles.js";
 
 const clientSchema = new mongoose.Schema(
   {
@@ -9,6 +10,7 @@ const clientSchema = new mongoose.Schema(
     password: { type: String, required: true },
     active: { type: Boolean, default: false },
     must_change_password: { type: Boolean, default: true },
+    role: { type: String, default: Roles.CLIENT },
   },
   {
     timestamps: true,
