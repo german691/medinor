@@ -3,6 +3,7 @@ import Client from "../client/client.model.js";
 import { Product } from "../product/product.model.js";
 import { Order } from "./order.model.js";
 import { Roles } from "../../roles.js";
+import createError from "http-errors";
 
 /**
  * Calcula los valores de descuento y precios finales para un producto.
@@ -53,12 +54,12 @@ export const addOrder = asyncHandler(async (req, res) => {
   const { id } = req.user;
 
   if (!id || !Array.isArray(items) || items.length === 0) {
-    res.status(400).send("Datos incompletos o inválidos");
+    throw createError(400, "Datos incompletos o inválidos");
   }
 
   const client = await Client.findById(id);
   if (!client) {
-    res.status(404).send("Cliente no encontrado");
+    throw createError(404, "Cliente no encontrado");
   }
 
   let total = 0;
@@ -95,7 +96,7 @@ export const addOrder = asyncHandler(async (req, res) => {
   }
 
   if (orderItems.length === 0) {
-    res.status(400).send("Ningún producto válido en la orden");
+    throw createError(400, "Ningún producto válido en la orden");
   }
 
   const order = new Order({
@@ -182,9 +183,6 @@ export const getOrders = asyncHandler(async (req, res) => {
       items: orders,
     });
   } catch (error) {
-    console.error("Error al obtener órdenes de pedidos:", error);
-    res
-      .status(500)
-      .send("Error interno del servidor al obtener órdenes de pedidos.");
+    throw error;
   }
 });

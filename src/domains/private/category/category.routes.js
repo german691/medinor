@@ -8,7 +8,7 @@ const router = express.Router();
 /**
  * @route GET /
  * @desc Obtiene un listado de todas las categorías existentes.
- * @access Privado (ADMIN, SUPERADMIN, requiere autenticación).
+ * @access Private (ADMIN, SUPERADMIN, requiere autenticación).
  * @returns {200} - Retorna un objeto con un array de categorías.
  * @returns {Array<Object>} returns.items - Lista de objetos de categoría, cada uno con la propiedad `category` (el nombre).
  * @returns {500} - Retorna un error interno del servidor si falla la consulta.
@@ -18,7 +18,7 @@ router.get("/", auth([Roles.ADMIN, Roles.SUPERADMIN]), getCategories);
 /**
  * @route POST /
  * @desc Crea una nueva categoría en el sistema.
- * @access Privado (ADMIN, SUPERADMIN, requiere autenticación).
+ * @access Private (ADMIN, SUPERADMIN, requiere autenticación).
  * @body {Object} body - El cuerpo de la solicitud, conteniendo el nombre de la categoría.
  * @body {string} body.name - El nombre de la categoría a crear.
  * @returns {201} - Retorna un mensaje de éxito y el objeto de la categoría creada.

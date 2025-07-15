@@ -16,7 +16,7 @@ const router = express.Router();
 /**
  * @route POST /get
  * @desc Obtiene un listado paginado de productos, con opciones de filtrado, ordenamiento y búsqueda.
- * @access Privado (requiere autenticación y usuario activo).
+ * @access Private (requiere autenticación y usuario activo).
  * @body {Object} [body] - Objeto con parámetros para la consulta.
  * @body {number} [body.page=1] - Número de página para la paginación.
  * @body {number} [body.limit=25] - Cantidad de productos por página.
@@ -36,7 +36,7 @@ router.post("/get", auth(), verifyUserActive, getProducts);
  * @route POST /get/:id
  * @desc Obtiene los detalles de un producto específico por su ID.
  * Aunque usa POST, es para obtener un recurso por ID.
- * @access Privado (requiere autenticación y usuario activo).
+ * @access Private (requiere autenticación y usuario activo).
  * @param {string} id - ID del producto a buscar en los parámetros de la URL.
  * @returns {200} - Retorna un objeto con el producto encontrado y formateado.
  * @returns {400} - Retorna un error si el ID del producto es inválido.
@@ -48,7 +48,7 @@ router.post("/get/:id", auth(), verifyUserActive, getProductById);
 /**
  * @route POST /add
  * @desc Crea un nuevo producto en la base de datos.
- * @access Privado (requiere autenticación y usuario activo).
+ * @access Private (requiere autenticación y usuario activo).
  * @body {Object} product - Datos del nuevo producto a crear.
  * @body {string} product.code - Código único del producto.
  * @body {string} product.desc - Descripción del producto.
@@ -64,7 +64,7 @@ router.post("/add", auth(), verifyUserActive, createProduct);
 /**
  * @route PUT /update
  * @desc Actualiza múltiples productos de forma masiva.
- * @access Privado (requiere autenticación y usuario activo).
+ * @access Private (requiere autenticación y usuario activo).
  * @body {Array<Object>} products - Lista de objetos de producto, donde cada objeto
  * debe contener el `_id` del producto y los campos a actualizar.
  * @returns {200} - Retorna un mensaje de éxito y los productos actualizados si todas las actualizaciones fueron exitosas.
@@ -76,7 +76,7 @@ router.put("/update", auth(), verifyUserActive, bulkUpdateProducts);
 /**
  * @route PUT /:id
  * @desc Actualiza un producto específico por su ID.
- * @access Privado (requiere autenticación y usuario activo).
+ * @access Private (requiere autenticación y usuario activo).
  * @param {string} id - ID del producto a actualizar en los parámetros de la URL.
  * @body {Object} updates - Campos a actualizar del producto.
  * @returns {200} - Retorna un mensaje de éxito y el objeto del producto actualizado.

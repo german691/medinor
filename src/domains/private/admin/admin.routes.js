@@ -39,7 +39,7 @@ router.post("/login", handleAdminLogin);
  * @route POST /register
  * @desc Registra un nuevo administrador en el sistema.
  * Requiere una clave de administrador especial en los headers (`x-admin-key`).
- * @access Privado (solo SUPERADMIN, requiere autenticación).
+ * @access Private (solo SUPERADMIN, requiere autenticación).
  * @header {string} x-admin-key - Clave de acceso secreta para el registro de administradores.
  * @body {Object} adminData - Datos del nuevo administrador.
  * @body {string} adminData.username - Nombre de usuario único para el nuevo administrador.
@@ -56,7 +56,7 @@ router.post("/register", auth([Roles.SUPERADMIN]), handleAdminRegister);
 /**
  * @route GET /:adminId
  * @desc Obtiene los detalles de un administrador específico por su ID.
- * @access Privado (ADMIN, SUPERADMIN, requiere autenticación).
+ * @access Private (ADMIN, SUPERADMIN, requiere autenticación).
  * @param {string} adminId - ID del administrador a buscar en los parámetros de la URL.
  * @returns {200} - Retorna un objeto con los detalles del administrador (username, fullName, role, active).
  * @returns {404} - Retorna un error si el administrador no es encontrado.
@@ -72,7 +72,7 @@ router.get(
  * @route DELETE /:adminId
  * @desc Realiza un "soft delete" (desactivación) de la cuenta de un administrador por su ID.
  * La cuenta no se elimina físicamente, solo se marca como inactiva.
- * @access Privado (solo SUPERADMIN, requiere autenticación).
+ * @access Private (solo SUPERADMIN, requiere autenticación).
  * @param {string} adminId - ID del administrador a desactivar en los parámetros de la URL.
  * @returns {200} - Retorna un mensaje de éxito indicando que el administrador fue desactivado.
  * @returns {404} - Retorna un error si el administrador no es encontrado.
@@ -83,7 +83,7 @@ router.delete("/:adminId", auth([Roles.SUPERADMIN]), handleDeleteAdmin);
 /**
  * @route PUT /:adminId
  * @desc Reactiva la cuenta de un administrador previamente desactivado por su ID.
- * @access Privado (solo SUPERADMIN, requiere autenticación).
+ * @access Private (solo SUPERADMIN, requiere autenticación).
  * @param {string} adminId - ID del administrador a reactivar en los parámetros de la URL.
  * @returns {200} - Retorna un mensaje de éxito indicando que el administrador fue reactivado.
  * @returns {404} - Retorna un error si el administrador no es encontrado.
@@ -94,7 +94,7 @@ router.put("/:adminId", auth([Roles.SUPERADMIN]), handleReactivateAdmin);
 /**
  * @route PUT /:adminId/reset
  * @desc Restablece la contraseña de un administrador específico por su ID.
- * @access Privado (solo SUPERADMIN, requiere autenticación).
+ * @access Private (solo SUPERADMIN, requiere autenticación).
  * @param {string} adminId - ID del administrador cuya contraseña se va a restablecer en los parámetros de la URL.
  * @body {Object} body - Objeto con la nueva contraseña.
  * @body {string} body.newPassword - La nueva contraseña para el administrador.

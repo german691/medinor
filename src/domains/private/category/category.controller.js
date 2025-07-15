@@ -1,5 +1,6 @@
 import asyncHandler from "express-async-handler";
 import { Category } from "./category.model.js";
+import createError from "http-errors";
 
 /**
  * Obtiene un listado de todas las categorías almacenadas en la base de datos.
@@ -14,7 +15,6 @@ import { Category } from "./category.model.js";
 export const getCategories = asyncHandler(async (req, res) => {
   const categories = await Category.find().lean();
   const mappedCategories = categories.map((c) => ({ category: c.name }));
-  console.log(categories);
   res.status(200).json({ items: mappedCategories });
 });
 
@@ -38,14 +38,12 @@ export const createCategories = asyncHandler(async (req, res) => {
   const { name } = req.body;
 
   if (!name) {
-    return res
-      .status(400)
-      .send("No se proporcionó un nombre para la categoría");
+    throw createError(400, "No se proporcionó un nombre para la categoría");
   }
 
   const cateogoryExists = await Category.findOne({ name: name });
   if (cateogoryExists) {
-    return res.status(409).send("Ya existe la categoría.");
+    throw createError(409, "Categoría duplicada");
   }
 
   try {
@@ -59,6 +57,6 @@ export const createCategories = asyncHandler(async (req, res) => {
       category: createdCategory,
     });
   } catch (error) {
-    res.status(500).send("Error interno del servidor al crear categoría.");
+    throw error;
   }
 });

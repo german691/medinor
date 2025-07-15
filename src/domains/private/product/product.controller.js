@@ -3,6 +3,7 @@ import { Product } from "./product.model.js";
 import mongoose from "mongoose";
 import asyncHandler from "express-async-handler";
 import { Category } from "../category/category.model.js";
+import createError from "http-errors";
 
 /**
  * Analiza un listado de productos para prepararlos para migración.
@@ -29,11 +30,10 @@ export const analyzeProducts = asyncHandler(async (req, res) => {
   const { products: productsData } = req.body;
 
   if (!Array.isArray(productsData) || productsData.length === 0) {
-    res
-      .status(400)
-      .send(
-        "No se encontraron datos de productos en la solicitud o el formato es incorrecto (debe ser un array en 'products')."
-      );
+    throw createError(
+      400,
+      "No se encontraron datos de productos en la solicitud o el formato es incorrecto (debe ser un array en 'products')."
+    );
   }
 
   const normalizeName = (name) =>
@@ -285,7 +285,7 @@ export const confirmProductMigration = asyncHandler(async (req, res) => {
   const { productsToMigrate } = req.body;
 
   if (!Array.isArray(productsToMigrate) || productsToMigrate.length === 0) {
-    res.status(400).send("No se encontraron productos válidos para migrar.");
+    throw createError(400, "No se encontraron productos válidos para migrar.");
   }
 
   let createdCount = 0;
@@ -339,12 +339,7 @@ export const confirmProductMigration = asyncHandler(async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error general durante la migración de productos:", error);
-
-    res.status(500).json({
-      message: "Error interno del servidor al ejecutar la migración.",
-      migrationErrors: migrationErrors,
-    });
+    throw error;
   }
 });
 
@@ -460,8 +455,7 @@ export const getProducts = asyncHandler(async (req, res) => {
       items: formattedProducts,
     });
   } catch (error) {
-    console.error("Error al obtener productos:", error);
-    res.status(500).send("Error interno del servidor al obtener productos.");
+    throw error;
   }
 });
 
@@ -483,11 +477,11 @@ export const getProductById = asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      res.status(400).send("ID de producto inválido.");
+      throw createError(400, "ID de producto inválido.");
     }
     const product = await Product.findById(id).populate("lab").lean();
     if (!product) {
-      res.status(400).send("Producto no encontrado.");
+      throw createError(404, "Producto no encontrado.");
     }
     const formattedProduct = {
       ...product,
@@ -496,8 +490,7 @@ export const getProductById = asyncHandler(async (req, res) => {
     };
     res.status(200).json({ product: formattedProduct });
   } catch (error) {
-    console.error(`Error al obtener producto con ID ${req.params.id}:`, error);
-    res.status(400).send("Error interno del servidor al obtener productos.");
+    throw error;
   }
 });
 
@@ -546,34 +539,33 @@ export const createProduct = asyncHandler(async (req, res) => {
     console.log(req.body);
 
     if (!code || !desc || !lab || !category) {
-      res
-        .status(400)
-        .send(
-          "Código, descripción, laboratorio y categoría son campos requeridos."
-        );
+      throw createError(
+        400,
+        "Código, descripción, laboratorio y categoría son campos requeridos."
+      );
     }
 
     const labIsValid = await Lab.findOne({ name: lab });
     if (!labIsValid) {
-      res
-        .status(400)
-        .send(`No se proporcionó un nombre de laboratorio válido: '${lab}'.`);
+      throw createError(
+        400,
+        `No se proporcionó un nombre de laboratorio válido: '${lab}'.`
+      );
     }
     const labId = labIsValid._id;
 
     const categoryIsValid = await Category.findOne({ name: category });
     if (!categoryIsValid) {
-      res
-        .status(400)
-        .send(
-          `No se proporcionó un nombre de categoría válido: '${category}'.`
-        );
+      throw createError(
+        400,
+        `No se proporcionó un nombre de categoría válido: '${category}'.`
+      );
     }
     const categoryId = categoryIsValid._id;
 
     const existingProduct = await Product.findOne({ code: code });
     if (existingProduct) {
-      res.status(409).send(`Ya existe un producto con el código '${code}'.`);
+      throw createError(409, `Ya existe un producto con el código '${code}'.`);
     }
 
     const newProduct = new Product({
@@ -613,8 +605,7 @@ export const createProduct = asyncHandler(async (req, res) => {
       product: formattedCreatedProduct,
     });
   } catch (error) {
-    console.error("Error al crear producto:", error);
-    res.status(500).send("Error interno del servidor al crear producto.");
+    throw error;
   }
 });
 
@@ -644,18 +635,19 @@ export const updateProduct = asyncHandler(async (req, res) => {
     const { code, lab } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      res.status(400).send("ID de producto inválido.");
+      throw createError(400, "ID de producto inválido.");
     }
     if (!mongoose.Types.ObjectId.isValid(lab)) {
-      res.status(400).send("ID de laboratorio proporcionado no es válido.");
+      throw createError(400, "ID de laboratorio proporcionado no es válido.");
     }
 
     if (code) {
       const productWithSameCode = await Product.findOne({ code: code });
       if (productWithSameCode && productWithSameCode._id.toString() !== id) {
-        res
-          .status(409)
-          .send(`El código '${code}' ya está en uso por otro producto.`);
+        throw createError(
+          409,
+          `El código '${code}' ya está en uso por otro producto.`
+        );
       }
     }
 
@@ -667,7 +659,7 @@ export const updateProduct = asyncHandler(async (req, res) => {
       .lean();
 
     if (!updatedProduct) {
-      res.status(404).send("Producto no encontrado.");
+      throw createError(404, "Producto no encontrado.");
     }
 
     const formattedUpdatedProduct = {
@@ -692,13 +684,12 @@ export const updateProduct = asyncHandler(async (req, res) => {
       error
     );
     if (error.code === 11000) {
-      res
-        .status(409)
-        .send("Ya existe un producto con el código proporcionado.");
+      throw createError(
+        409,
+        "Ya existe un producto con el código proporcionado."
+      );
     }
-    res
-      .status(500)
-      .send("Error interno del servidor al actualizar el producto.");
+    throw error;
   }
 });
 
@@ -728,7 +719,7 @@ export const bulkUpdateProducts = asyncHandler(async (req, res) => {
   console.log("product update control (datos recibidos):", productsToUpdate);
 
   if (!Array.isArray(productsToUpdate) || productsToUpdate.length === 0) {
-    res.status(400).send("Se espera un array de productos para actualizar.");
+    throw createError(400, "Se espera un array de productos para actualizar.");
     return;
   }
 

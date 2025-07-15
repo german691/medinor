@@ -36,7 +36,7 @@ const router = express.Router();
  * @desc Analiza un listado de clientes proporcionado para identificar nuevos clientes,
  * clientes existentes y posibles conflictos (duplicados por CUIT o código de cliente
  * dentro del archivo o con la base de datos).
- * @access Privado (solo SUPERADMIN, requiere autenticación).
+ * @access Private (solo SUPERADMIN, requiere autenticación).
  * @body {Array<Object>} clients - Array de objetos de cliente a analizar. Cada objeto
  * debe contener al menos `COD_CLIENT`, `IDENTIFTRI` (CUIT) y `RAZON_SOCI`.
  * @returns {200} - Retorna un resumen detallado del análisis, incluyendo:
@@ -51,7 +51,7 @@ router.post("/analyze", auth(Roles.SUPERADMIN), analyzeClients);
  * @route POST /make-migration
  * @desc Confirma y ejecuta la migración masiva de clientes. Inserta los clientes
  * identificados como "nuevos" en la base de datos.
- * @access Privado (solo SUPERADMIN, requiere autenticación).
+ * @access Private (solo SUPERADMIN, requiere autenticación).
  * @body {Object} body - Objeto que contiene los datos para la migración.
  * @body {Array<Object>} body.data.newClients - Array de objetos de cliente
  * listos para ser creados en la base de datos.
@@ -71,7 +71,7 @@ router.post("/make-migration", auth(Roles.SUPERADMIN), confirmClientMigration);
  * @route POST /get
  * @desc Obtiene un listado paginado de clientes, con opciones de filtrado,
  * ordenamiento y búsqueda por campos específicos (código, razón social, CUIT, username).
- * @access Privado (ADMIN, SUPERADMIN, requiere autenticación).
+ * @access Private (ADMIN, SUPERADMIN, requiere autenticación).
  * @body {Object} [body] - Objeto con parámetros para la consulta.
  * @body {number} [body.page=1] - Número de página para la paginación.
  * @body {number} [body.limit=25] - Cantidad de clientes por página.
@@ -90,7 +90,7 @@ router.post("/get", auth([Roles.ADMIN, Roles.SUPERADMIN]), getClients);
 /**
  * @route GET /get/:id
  * @desc Obtiene los detalles de un cliente específico por su ID.
- * @access Privado (ADMIN, SUPERADMIN, requiere autenticación).
+ * @access Private (ADMIN, SUPERADMIN, requiere autenticación).
  * @param {string} id - ID del cliente a buscar en los parámetros de la URL.
  * @returns {200} - Retorna un objeto con el cliente encontrado.
  * @returns {404} - Retorna un error si el cliente no es encontrado.
@@ -115,7 +115,7 @@ router.post("/add", validateReqBody(createClientSchema), createNewClient);
  * @route PUT /update
  * @desc Actualiza múltiples clientes de forma masiva. Permite actualizar
  * varios campos de diferentes clientes en una sola solicitud.
- * @access Privado (solo ADMIN, requiere autenticación).
+ * @access Private (solo ADMIN, requiere autenticación).
  * @body {Array<Object>} clients - Array de objetos, donde cada objeto debe
  * contener el `_id` del cliente a actualizar y los campos a modificar.
  * @returns {200} - Retorna un mensaje de éxito y la lista de clientes actualizados
@@ -130,7 +130,7 @@ router.put("/update", auth(Roles.ADMIN), bulkUpdateClients);
  * @route PUT /update/:id
  * @desc Actualiza los datos de un cliente específico por su ID.
  * Los datos de actualización son validados por el esquema `updateClientSchema`.
- * @access Privado (ADMIN, SUPERADMIN, requiere autenticación).
+ * @access Private (ADMIN, SUPERADMIN, requiere autenticación).
  * @param {string} id - ID del cliente a actualizar en los parámetros de la URL.
  * @body {Object} updates - Objeto con los campos del cliente a actualizar.
  * Puede incluir `cod_client`, `razon_soci`, `identiftri`, `username`, `password`, `active`, etc.
@@ -172,7 +172,7 @@ router.post("/login", loginClient);
  * @route POST /reset-password
  * @desc Permite a un cliente restablecer su contraseña. Requiere un token
  * de propósito `resetPassword` para ser autorizado.
- * @access Privado (solo CLIENT con token `resetPassword`, requiere autenticación).
+ * @access Private (solo CLIENT con token `resetPassword`, requiere autenticación).
  * @body {Object} body - Objeto con la nueva contraseña.
  * @body {string} body.newPassword - La nueva contraseña para el cliente.
  * @returns {200} - Retorna un mensaje de éxito si la contraseña se restablece correctamente.
@@ -188,7 +188,7 @@ router.post(
 /**
  * @route GET /me
  * @desc Obtiene la información de la cuenta del cliente autenticado.
- * @access Privado (solo CLIENT, requiere autenticación y usuario activo).
+ * @access Private (solo CLIENT, requiere autenticación y usuario activo).
  * @returns {200} - Retorna un objeto con la información del cliente autenticado
  * (ID, username, razón social).
  * @returns {401} - Retorna un error si no hay un cliente autenticado.

@@ -8,7 +8,7 @@ const router = express.Router();
 /**
  * @route POST /add
  * @desc Crea una nueva orden de pedido.
- * @access Privado (solo CLIENT, requiere autenticación y usuario activo)
+ * @access Private (solo CLIENT, requiere autenticación y usuario activo)
  * @body {Object} body - Datos de la orden a crear.
  * @body {Array<Object>} body.items - Array de productos en la orden, con `productId` y `quantity`.
  * @returns {Object} La orden creada con un mensaje de éxito.
@@ -18,7 +18,7 @@ router.post("/add", auth(Roles.CLIENT), addOrder);
 /**
  * @route POST /get
  * @desc Obtener lista de órdenes de pedido según filtros y paginación.
- * @access Privado (CLIENT ve sus propias órdenes; ADMIN/SUPERADMIN ven todas).
+ * @access Private (CLIENT ve sus propias órdenes; ADMIN/SUPERADMIN ven todas).
  * @body {Object} [filters] - Filtros para la búsqueda de órdenes.
  * @body {number} [page=1] - Número de página para la paginación.
  * @body {number} [limit=25] - Cantidad de elementos por página.

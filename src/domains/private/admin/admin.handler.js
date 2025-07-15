@@ -10,6 +10,7 @@ import {
   updateAdminInfo,
 } from "./admin.controller.js";
 import { loginSchema, registerSchema } from "./admin.schema.js";
+import createError from "http-errors";
 
 /**
  * Maneja la solicitud para registrar un nuevo administrador.
@@ -32,10 +33,11 @@ import { loginSchema, registerSchema } from "./admin.schema.js";
 export const handleAdminRegister = asyncHandler(async (req, res) => {
   const key = req.headers["x-admin-key"];
   if (!process.env.ADMIN_KEY) {
-    throw new Error("Admin token key no definido en .env");
+    throw createError(500, "Admin token key no definido en .env");
   }
 
-  if (key !== process.env.ADMIN_KEY) throw new Error("Acceso no autorizado");
+  if (key !== process.env.ADMIN_KEY)
+    throw createError(500, "Acceso no autorizado");
 
   const { error, value } = registerSchema.validate(req.body);
   if (error) {
@@ -118,11 +120,11 @@ export const handleResetAdminPassword = asyncHandler(async (req, res) => {
   const { adminId } = req.params;
   const { newPassword } = req.body;
   if (!newPassword) {
-    return res.status(400).send("No se recibió una contraseña");
+    throw createError(400, "Nueva contraseña requerida");
   }
 
   await resetAdminPassword(adminId, newPassword);
-  res.status(200).send("Contraseña reseteada correctamente");
+  res.status(200).json({ message: "Contraseña reseteada correctamente" });
 });
 
 /**
@@ -138,7 +140,7 @@ export const handleResetAdminPassword = asyncHandler(async (req, res) => {
 export const handleGetAdminById = asyncHandler(async (req, res) => {
   const { adminId } = req.params;
   const admin = await getAdminById(adminId);
-  res.status(200).json(admin);
+  res.status(200).json({ item: admin });
 });
 
 /**
@@ -170,7 +172,7 @@ export const handleGetAdminList = asyncHandler(async (req, res) => {
 export const handleDeleteAdmin = asyncHandler(async (req, res) => {
   const { adminId } = req.params;
   await softDeleteAdmin(adminId);
-  res.status(200).send("Admin soft deleted successfully");
+  res.status(200).json({ message: "Admin soft deleted successfully" });
 });
 
 /**
@@ -186,5 +188,5 @@ export const handleDeleteAdmin = asyncHandler(async (req, res) => {
 export const handleReactivateAdmin = asyncHandler(async (req, res) => {
   const { adminId } = req.params;
   await reactivateAdmin(adminId);
-  res.status(200).send("Admin reactivated successfully");
+  res.status(200).json({ message: "Usuario activado correctamente" });
 });

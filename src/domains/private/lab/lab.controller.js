@@ -1,5 +1,6 @@
 import asyncHandler from "express-async-handler";
 import { Lab } from "./lab.model.js";
+import createError from "http-errors";
 
 /**
  * Obtiene un listado de todos los laboratorios almacenados en la base de datos.
@@ -31,12 +32,12 @@ export const createLab = asyncHandler(async (req, res) => {
   const { name } = req.body;
 
   if (!name) {
-    res.status(400).send("No se proporcionó un nombre para el laboratorio");
+    throw createError(400, "No se proporcionó un nombre para el laboratorio");
   }
 
   const labExists = await Lab.findOne({ name: name });
   if (labExists) {
-    res.status(409).send("Ya existe el laboratorio.");
+    throw createError(409, "Ya existe el laboratorio.");
   }
 
   try {
@@ -49,6 +50,7 @@ export const createLab = asyncHandler(async (req, res) => {
       .status(201)
       .json({ message: "Laboratorio creado correctamente.", lab: createdLab });
   } catch (error) {
-    res.status(500).send("Error interno del servidor al crear laboratorio.");
+    console.log(error);
+    throw error;
   }
 });
